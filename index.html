@@ -209,7 +209,7 @@
     /**
      * 添加任务：读取输入、校验非空、创建元素并追加到列表、清空输入
      */
-    function addTask() {
+    async function addTask() {
       const text = taskInput.value.trim();
       // 如果输入为空则不处理
       if (!text) return;
@@ -220,8 +220,9 @@
       taskInput.value = '';
       taskInput.focus();
 
-      // 新增任务后保存当前列表到 localStorage
-      saveTasks();
+      // 新增任务后保存当前列表到本地或远端
+      if (API_BASE) await saveTasksToServer().catch(err => console.warn('保存到服务器失败：', err));
+      else saveTasks();
     }
 
     // 点击按钮触发添加
@@ -239,15 +240,16 @@
         - 对之后动态添加的任务也有效（无需为每个新按钮重复绑定事件）
         - 保持代码简洁，避免重复绑定导致的多次触发问题
     */
-    taskList.addEventListener('click', function (e) {
+    taskList.addEventListener('click', async function (e) {
       const target = e.target;
 
       // 如果点击的是删除按钮，则只移除对应的任务项
       if (target.classList.contains('btn-delete')) {
         const li = target.closest('li.task');
         if (li) taskList.removeChild(li);
-        // 删除后保存
-        saveTasks();
+        // 删除后保存（远端或本地）
+        if (API_BASE) await saveTasksToServer().catch(err => console.warn('保存到服务器失败：', err));
+        else saveTasks();
         return;
       }
 
@@ -260,8 +262,9 @@
           li.classList.toggle('completed');
           // 根据当前状态设置按钮文字为“取消”或“完成”
           target.textContent = li.classList.contains('completed') ? '取消' : '完成';
-          // 状态改变后保存
-          saveTasks();
+          // 状态改变后保存（远端或本地）
+          if (API_BASE) await saveTasksToServer().catch(err => console.warn('保存到服务器失败：', err));
+          else saveTasks();
         }
       }
     });
@@ -310,8 +313,56 @@
       }
     }
 
-    // 页面加载时从 localStorage 初始化任务列表
-    loadTasks();
+    // 配置：如果你部署了后端到 Zeabur，请把 API_BASE 改为你的应用域名（不要以斜杠结尾）
+    // 例：const API_BASE = 'https://your-app.zeabur.app'
+    const API_BASE = ''; // <-- 默认为空，使用 localStorage；部署后设置为你的后端地址以启用跨设备同步
+
+    // 页面加载时初始化任务列表：优先尝试从远端（若配置），否则使用 localStorage
+    (async function init() {
+      if (API_BASE) {
+        // 尝试从后端加载；失败则回退到 localStorage
+        try {
+          await loadTasksFromServer();
+          return;
+        } catch (err) {
+          console.warn('从服务器加载失败，回退到 localStorage：', err);
+        }
+      }
+      loadTasks();
+    })();
+
+    /**
+     * 从后端读取任务（bulk GET），并用数据初始化列表
+     */
+    async function loadTasksFromServer() {
+      const res = await fetch(API_BASE + '/api/tasks');
+      if (!res.ok) throw new Error('fetch failed');
+      const tasks = await res.json();
+      if (!Array.isArray(tasks)) throw new Error('invalid format');
+      taskList.innerHTML = '';
+      tasks.forEach(t => {
+        const li = createTaskElement(t.text, Boolean(t.completed));
+        taskList.appendChild(li);
+      });
+    }
+
+    /**
+     * 将当前任务列表推送到后端（bulk PUT）
+     */
+    async function saveTasksToServer() {
+      const tasks = Array.from(taskList.querySelectorAll('li.task')).map(li => ({
+        text: li.querySelector('.task-text').textContent,
+        completed: li.classList.contains('completed')
+      }));
+      const res = await fetch(API_BASE + '/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tasks)
+      });
+      if (!res.ok) throw new Error('save failed');
+    }
+
+    // 页面加载时初始化结束
   </script>
 </body>
 </html>
