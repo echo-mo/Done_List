@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>🎯 My Todo List</title>
+  <title>Willah's Done List</title>
   <meta name="description" content="Dream big, act daily, get things done.">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -145,6 +145,22 @@
     .btn-complete:hover { background: #57a35a; }
     .btn-delete { background: #ef5350; color: white; }
     .btn-delete:hover { background: #e03e3a; }
+    .btn-edit { background: #42a5f5; color: white; }
+    .btn-edit:hover { background: #1e88e5; }
+    .btn-save { background: #66bb6a; color: white; }
+    .btn-cancel { background: #b0bec5; color: #263238; }
+
+    .task-date { font-size: 0.85em; color: #666; margin-top: 4px; }
+    .task.completed .task-date { color: #888; }
+    .task-content { flex: 1; min-width: 0; }
+
+    .section-title { color: #764ba2; font-size: 1.2em; margin-bottom: 15px; }
+    .done-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
+    .done-list { list-style: none; padding: 0; margin: 0; }
+    .done-list .task { border-left-color: #66bb6a; background: #f1f8f4; }
+    .done-list .task-text { text-decoration: line-through; color: #888; }
+    .edit-fields { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+    .edit-fields input[type="text"], .edit-fields input[type="date"] { padding: 10px; border: 2px solid #667eea; border-radius: 10px; font-size: 1em; }
 
     /* 手机端：与参考 HTML 一致 */
     @media (max-width: 768px) {
@@ -174,7 +190,7 @@
   <div class="container">
     <section class="app-card">
       <header>
-        <h1 class="title">🎯 My Todo List</h1>
+        <h1 class="title">Willah's Done List</h1>
         <p class="subtitle">Dream big, act daily, get things done.</p>
       </header>
 
@@ -205,34 +221,12 @@
         <button class="btn-add" aria-label="添加任务">添加</button>
       </div>
 
-      <!-- 任务列表：预先放置 3 条示例数据，用于展示样式 -->
-      <ul class="task-list" aria-live="polite">
-        <!-- 单条任务结构：任务内容 + 操作按钮 -->
-        <li class="task">
-          <span class="task-text">完成项目报告</span>
-          <div class="actions">
-            <button class="btn-complete" aria-label="标记完成">完成</button>
-            <button class="btn-delete" aria-label="删除任务">删除</button>
-          </div>
-        </li>
+      <ul class="task-list" aria-live="polite"></ul>
 
-        <li class="task">
-          <span class="task-text">买牛奶</span>
-          <div class="actions">
-            <button class="btn-complete" aria-label="标记完成">完成</button>
-            <button class="btn-delete" aria-label="删除任务">删除</button>
-          </div>
-        </li>
-
-        <li class="task completed">
-          <span class="task-text">给妈妈打电话</span>
-          <div class="actions">
-            <button class="btn-complete" aria-label="标记未完成">取消</button>
-            <button class="btn-delete" aria-label="删除任务">删除</button>
-          </div>
-        </li>
-      </ul>
-
+      <div class="done-section">
+        <h2 class="section-title">✅ Today's Completed</h2>
+        <ul class="done-list" id="done-list" aria-live="polite"></ul>
+      </div>
     </section>
   </div>
 
@@ -248,45 +242,52 @@
     const addButton = document.querySelector('.btn-add'); // 添加按钮
     const taskList = document.querySelector('.task-list'); // 任务列表容器
 
-    /**
-     * 创建一个任务列表项的 DOM 元素
-     * @param {string} text 任务文本
-     * @returns {HTMLElement} li 元素
-     */
-    // 创建任务元素：支持初始状态（completed）
-    function createTaskElement(text, completed = false) {
+    function todayStr() { return new Date().toISOString().slice(0, 10); }
+    function isCompletedToday(completedAt) {
+      if (!completedAt) return true;
+      return completedAt.slice(0, 10) === todayStr();
+    }
+
+    function createTaskElement(text, completed, createdAt, completedAt, id) {
+      if (id == null) id = Date.now();
+      if (!createdAt) createdAt = todayStr();
       const li = document.createElement('li');
       li.className = 'task';
+      li.dataset.id = String(id);
+      li.dataset.createdAt = createdAt;
+      li.dataset.completedAt = completedAt || '';
       if (completed) li.classList.add('completed');
 
-      // 任务文本节点
+      const content = document.createElement('div');
+      content.className = 'task-content';
       const span = document.createElement('span');
       span.className = 'task-text';
       span.textContent = text;
+      const dateSpan = document.createElement('div');
+      dateSpan.className = 'task-date';
+      dateSpan.textContent = createdAt;
+      content.appendChild(span);
+      content.appendChild(dateSpan);
 
-      // 操作按钮容器
       const actions = document.createElement('div');
       actions.className = 'actions';
-
-      // 完成按钮（使用事件委托统一处理）
       const completeBtn = document.createElement('button');
       completeBtn.type = 'button';
       completeBtn.className = 'btn-complete';
-      // 如果初始为已完成，则按钮文字显示为“取消”
       completeBtn.textContent = completed ? '取消' : '完成';
-
-      // 删除按钮（使用事件委托统一处理）
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn-edit';
+      editBtn.textContent = '编辑';
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'btn-delete';
       deleteBtn.textContent = '删除';
-
-      // 组装节点
       actions.appendChild(completeBtn);
+      actions.appendChild(editBtn);
       actions.appendChild(deleteBtn);
-      li.appendChild(span);
+      li.appendChild(content);
       li.appendChild(actions);
-
       return li;
     }
 
@@ -295,10 +296,10 @@
      */
     async function addTask() {
       const text = taskInput.value.trim();
-      // 如果输入为空则不处理
       if (!text) return;
-
-      const taskItem = createTaskElement(text);
+      const createdAt = todayStr();
+      const id = Date.now();
+      const taskItem = createTaskElement(text, false, createdAt, null, id);
       taskList.appendChild(taskItem);
       // 清空并聚焦输入框，方便继续添加
       taskInput.value = '';
@@ -338,32 +339,113 @@
         return;
       }
 
-      // 如果点击的是完成按钮，则切换该任务的完成状态（toggle）
-      // 首次点击：添加 "completed" 样式 -> 显示删除线、变灰；按钮文字显示为 "取消"
-      // 再次点击：移除 "completed" -> 恢复正常显示；按钮文字显示为 "完成"
+      // 点击完成：从主列表移到「当天完成」模块
       if (target.classList.contains('btn-complete')) {
         const li = target.closest('li.task');
-        if (li) {
-          li.classList.toggle('completed');
-          // 根据当前状态设置按钮文字为“取消”或“完成”
-          target.textContent = li.classList.contains('completed') ? '取消' : '完成';
-          // 状态改变后保存（远端或本地）
+        const doneList = document.getElementById('done-list');
+        if (li && doneList && taskList.contains(li)) {
+          li.dataset.completedAt = todayStr();
+          li.classList.add('completed');
+          const content = li.querySelector('.task-content');
+          if (content) {
+            const textEl = content.querySelector('.task-text');
+            if (textEl) textEl.style.textDecoration = 'line-through';
+          }
+          const actions = li.querySelector('.actions');
+          if (actions) {
+            actions.innerHTML = '';
+            const undoBtn = document.createElement('button');
+            undoBtn.type = 'button';
+            undoBtn.className = 'btn-complete btn-undo';
+            undoBtn.textContent = '取消';
+            actions.appendChild(undoBtn);
+          }
+          taskList.removeChild(li);
+          doneList.appendChild(li);
           if (API_BASE) await saveTasksToServer().catch(err => console.warn('保存到服务器失败：', err));
           else saveTasks();
           updateStats();
         }
       }
+
+      if (target.classList.contains('btn-edit')) {
+        const li = target.closest('li.task');
+        if (!li) return;
+        const textEl = li.querySelector('.task-text');
+        const currentText = textEl ? textEl.textContent : '';
+        const currentDate = li.dataset.createdAt || todayStr();
+        const actions = li.querySelector('.actions');
+        const content = li.querySelector('.task-content');
+        if (!content || !actions) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'edit-fields';
+        const inputText = document.createElement('input');
+        inputText.type = 'text';
+        inputText.value = currentText;
+        inputText.placeholder = '任务内容';
+        const inputDate = document.createElement('input');
+        inputDate.type = 'date';
+        inputDate.value = currentDate;
+        const btnWrap = document.createElement('div');
+        btnWrap.className = 'actions';
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'btn-save';
+        saveBtn.textContent = '保存';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn-cancel';
+        cancelBtn.textContent = '取消';
+        saveBtn.onclick = async function() {
+          const newText = inputText.value.trim();
+          if (!newText) return;
+          li.dataset.createdAt = inputDate.value || todayStr();
+          content.style.display = '';
+          content.querySelector('.task-text').textContent = newText;
+          content.querySelector('.task-date').textContent = li.dataset.createdAt;
+          li.removeChild(wrap);
+          li.appendChild(actions);
+          if (API_BASE) await saveTasksToServer().catch(() => {});
+          else saveTasks();
+          updateStats();
+        };
+        cancelBtn.onclick = function() {
+          content.style.display = '';
+          li.removeChild(wrap);
+          li.appendChild(actions);
+        };
+        btnWrap.appendChild(saveBtn);
+        btnWrap.appendChild(cancelBtn);
+        wrap.appendChild(inputText);
+        wrap.appendChild(inputDate);
+        wrap.appendChild(btnWrap);
+        content.style.display = 'none';
+        li.appendChild(wrap);
+        li.removeChild(actions);
+        inputText.focus();
+      }
     });
 
-    /**
-     * 将当前任务列表保存到 localStorage（key: "todoList"）
-     * 数据格式为 JSON 数组，每项为 { text: string, completed: boolean }
-     */
+    const doneListEl = document.getElementById('done-list');
+    if (doneListEl) {
+      doneListEl.addEventListener('click', async function (e) {
+        if (!e.target.classList.contains('btn-undo') && !e.target.classList.contains('btn-complete')) return;
+        const li = e.target.closest('li.task');
+        if (!li) return;
+        const id = li.dataset.id;
+        const text = li.querySelector('.task-text')?.textContent || '';
+        const createdAt = li.dataset.createdAt || todayStr();
+        doneListEl.removeChild(li);
+        const newLi = createTaskElement(text, false, createdAt, null, id);
+        taskList.appendChild(newLi);
+        if (API_BASE) await saveTasksToServer().catch(() => {});
+        else saveTasks();
+        updateStats();
+      });
+    }
+
     function saveTasks() {
-      const tasks = Array.from(taskList.querySelectorAll('li.task')).map(li => ({
-        text: li.querySelector('.task-text').textContent,
-        completed: li.classList.contains('completed')
-      }));
+      const tasks = getTasksSnapshot();
       try {
         localStorage.setItem('todoList', JSON.stringify(tasks));
       } catch (err) {
@@ -387,16 +469,12 @@
         const tasks = JSON.parse(raw);
         if (!Array.isArray(tasks)) throw new Error('格式不正确');
 
-        // 清空当前列表并根据保存的数据重建
-        taskList.innerHTML = '';
-        tasks.forEach(t => {
-          const li = createTaskElement(t.text, Boolean(t.completed));
-          taskList.appendChild(li);
-        });
-        updateStats();
+        applyTasks(tasks);
       } catch (err) {
         console.warn('读取 localStorage 失败，已初始化为空列表：', err);
         taskList.innerHTML = '';
+        const dl = document.getElementById('done-list');
+        if (dl) dl.innerHTML = '';
       }
     }
 
@@ -421,6 +499,8 @@
       const res = await fetch(API_BASE + '/api/storage?key=todoList');
       if (res.status === 404) {
         taskList.innerHTML = '';
+        const dl = document.getElementById('done-list');
+        if (dl) dl.innerHTML = '';
         updateStats();
         return;
       }
@@ -429,22 +509,16 @@
       const tasks = data.value;
       if (!Array.isArray(tasks)) {
         taskList.innerHTML = '';
+        const dl = document.getElementById('done-list');
+        if (dl) dl.innerHTML = '';
         updateStats();
         return;
       }
-      taskList.innerHTML = '';
-      tasks.forEach(t => {
-        const li = createTaskElement(t.text, Boolean(t.completed));
-        taskList.appendChild(li);
-      });
-      updateStats();
+      applyTasks(tasks);
     }
 
     async function saveTasksToServer() {
-      const tasks = Array.from(taskList.querySelectorAll('li.task')).map(li => ({
-        text: li.querySelector('.task-text').textContent,
-        completed: li.classList.contains('completed')
-      }));
+      const tasks = getTasksSnapshot();
       const res = await fetch(API_BASE + '/api/storage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -454,10 +528,23 @@
     }
 
     function getTasksSnapshot() {
-      return Array.from(taskList.querySelectorAll('li.task')).map(li => ({
-        text: li.querySelector('.task-text').textContent,
-        completed: li.classList.contains('completed')
-      }));
+      const fromMain = Array.from(taskList.querySelectorAll('li.task')).map(li => snapshotOne(li, false));
+      const doneList = document.getElementById('done-list');
+      const fromDone = doneList ? Array.from(doneList.querySelectorAll('li.task')).map(li => snapshotOne(li, true)) : [];
+      return fromMain.concat(fromDone);
+    }
+    function snapshotOne(li, completed) {
+      const textEl = li.querySelector('.task-text');
+      let createdAt = li.dataset.createdAt;
+      let completedAt = li.dataset.completedAt || null;
+      if (!createdAt) createdAt = todayStr();
+      return {
+        id: li.dataset.id ? Number(li.dataset.id) : Date.now(),
+        text: textEl ? textEl.textContent : '',
+        completed,
+        createdAt,
+        completedAt: completedAt || null
+      };
     }
 
     function updateStats() {
@@ -475,10 +562,36 @@
 
     function applyTasks(tasks) {
       if (!Array.isArray(tasks)) return;
+      const doneList = document.getElementById('done-list');
       taskList.innerHTML = '';
-      tasks.forEach(t => {
-        const li = createTaskElement(t.text, Boolean(t.completed));
-        taskList.appendChild(li);
+      if (doneList) doneList.innerHTML = '';
+      tasks.forEach((t, i) => {
+        const id = t.id != null ? t.id : Date.now() + i;
+        const createdAt = t.createdAt || todayStr();
+        const completedAt = t.completed ? (t.completedAt || todayStr()) : null;
+        const completed = Boolean(t.completed);
+        const li = createTaskElement(t.text, completed, createdAt, completedAt, id);
+        if (completed && doneList && isCompletedToday(completedAt)) {
+          li.classList.add('completed');
+          li.dataset.completedAt = completedAt;
+          const content = li.querySelector('.task-content');
+          if (content) {
+            const textEl = content.querySelector('.task-text');
+            if (textEl) textEl.style.textDecoration = 'line-through';
+          }
+          const actions = li.querySelector('.actions');
+          if (actions) {
+            actions.innerHTML = '';
+            const undoBtn = document.createElement('button');
+            undoBtn.type = 'button';
+            undoBtn.className = 'btn-complete btn-undo';
+            undoBtn.textContent = '取消';
+            actions.appendChild(undoBtn);
+          }
+          doneList.appendChild(li);
+        } else if (!completed) {
+          taskList.appendChild(li);
+        }
       });
       updateStats();
     }
