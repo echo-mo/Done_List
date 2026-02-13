@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>我的待办清单</title>
-  <meta name="description" content="简约现代的待办清单静态页面（单文件，HTML + 内嵌 CSS）。">
+  <title>🎯 My Todo List</title>
+  <meta name="description" content="Dream big, act daily, get things done.">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; }
@@ -41,6 +41,38 @@
       margin-bottom: 30px;
       font-style: italic;
     }
+
+    .quote {
+      background: #f0f4ff;
+      padding: 15px;
+      border-left: 4px solid #667eea;
+      margin-bottom: 30px;
+      border-radius: 5px;
+      font-style: italic;
+      color: #555;
+    }
+
+    .stats {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 15px;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 20px;
+      margin-top: 15px;
+    }
+    .stat-item {
+      background: rgba(255,255,255,0.2);
+      padding: 15px;
+      border-radius: 10px;
+    }
+    .stat-number { font-size: 2em; font-weight: bold; }
+    .stat-label { font-size: 0.9em; opacity: 0.9; }
 
     .input-row {
       display: flex;
@@ -119,6 +151,7 @@
       body { padding: 20px; }
       .app-card { padding: 20px; }
       .title { font-size: 2em; }
+      .stats-grid { grid-template-columns: 1fr; }
       .input-row {
         flex-direction: column;
         flex-wrap: wrap;
@@ -139,15 +172,32 @@
 </head>
 <body>
   <div class="container">
-    <!-- 主卡片：包含标题、输入区与任务列表 -->
     <section class="app-card">
-      <!-- 标题：用户可直接修改这里的文本 -->
       <header>
-        <h1 class="title">我的待办清单</h1>
-        <p class="subtitle">简单、清爽，适合职场新人快速记录待办。</p>
+        <h1 class="title">🎯 My Todo List</h1>
+        <p class="subtitle">Dream big, act daily, get things done.</p>
       </header>
 
-      <!-- 输入区域：目前仅样式（无 JS 功能） -->
+      <div class="quote" id="motivationalQuote">"The secret of getting ahead is getting started." - Mark Twain</div>
+
+      <div class="stats">
+        <h3 style="margin:0 0 5px 0;font-size:1.1em">📊 Task Overview</h3>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-number" id="statTotal">0</div>
+            <div class="stat-label">Today's Tasks</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" id="statCompleted">0</div>
+            <div class="stat-label">Year's Completed</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" id="statRate">0%</div>
+            <div class="stat-label">Year's Rate</div>
+          </div>
+        </div>
+      </div>
+
       <div class="input-row">
         <!-- 隐藏标签用于无障碍（屏幕阅读器） -->
         <label for="task-input" class="sr-only">输入新任务</label>
@@ -257,6 +307,7 @@
       // 新增任务后保存当前列表到本地或远端
       if (API_BASE) await saveTasksToServer().catch(err => console.warn('保存到服务器失败：', err));
       else saveTasks();
+      updateStats();
     }
 
     // 点击按钮触发添加
@@ -281,9 +332,9 @@
       if (target.classList.contains('btn-delete')) {
         const li = target.closest('li.task');
         if (li) taskList.removeChild(li);
-        // 删除后保存（远端或本地）
         if (API_BASE) await saveTasksToServer().catch(err => console.warn('保存到服务器失败：', err));
         else saveTasks();
+        updateStats();
         return;
       }
 
@@ -299,6 +350,7 @@
           // 状态改变后保存（远端或本地）
           if (API_BASE) await saveTasksToServer().catch(err => console.warn('保存到服务器失败：', err));
           else saveTasks();
+          updateStats();
         }
       }
     });
@@ -328,8 +380,8 @@
       try {
         const raw = localStorage.getItem('todoList');
         if (!raw) {
-          // 没有数据：清空任何静态示例，显示空列表
           taskList.innerHTML = '';
+          updateStats();
           return;
         }
         const tasks = JSON.parse(raw);
@@ -341,6 +393,7 @@
           const li = createTaskElement(t.text, Boolean(t.completed));
           taskList.appendChild(li);
         });
+        updateStats();
       } catch (err) {
         console.warn('读取 localStorage 失败，已初始化为空列表：', err);
         taskList.innerHTML = '';
@@ -368,6 +421,7 @@
       const res = await fetch(API_BASE + '/api/storage?key=todoList');
       if (res.status === 404) {
         taskList.innerHTML = '';
+        updateStats();
         return;
       }
       if (!res.ok) throw new Error('fetch failed');
@@ -375,6 +429,7 @@
       const tasks = data.value;
       if (!Array.isArray(tasks)) {
         taskList.innerHTML = '';
+        updateStats();
         return;
       }
       taskList.innerHTML = '';
@@ -382,6 +437,7 @@
         const li = createTaskElement(t.text, Boolean(t.completed));
         taskList.appendChild(li);
       });
+      updateStats();
     }
 
     async function saveTasksToServer() {
@@ -404,6 +460,19 @@
       }));
     }
 
+    function updateStats() {
+      const tasks = getTasksSnapshot();
+      const total = tasks.length;
+      const completed = tasks.filter(t => t.completed).length;
+      const rate = total ? Math.round(completed / total * 100) : 0;
+      const elTotal = document.getElementById('statTotal');
+      const elCompleted = document.getElementById('statCompleted');
+      const elRate = document.getElementById('statRate');
+      if (elTotal) elTotal.textContent = total;
+      if (elCompleted) elCompleted.textContent = completed;
+      if (elRate) elRate.textContent = rate + '%';
+    }
+
     function applyTasks(tasks) {
       if (!Array.isArray(tasks)) return;
       taskList.innerHTML = '';
@@ -411,6 +480,7 @@
         const li = createTaskElement(t.text, Boolean(t.completed));
         taskList.appendChild(li);
       });
+      updateStats();
     }
 
     async function pollAndMergeTasks() {
