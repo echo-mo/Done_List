@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My 2026 Goals Tracker - Enhanced</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-style: italic;
+        }
+
+        .quote {
+            background: #f0f4ff;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            margin-bottom: 30px;
+            border-radius: 5px;
+            font-style: italic;
+            color: #555;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .subsection-title {
+            color: #9575cd;
+            font-size: 1.2em;
+            margin: 20px 0 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .emoji {
+            font-size: 1.2em;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"], input[type="datetime-local"] {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="datetime-local"] {
+            flex: 0.5;
+        }
+
+        input[type="text"]:focus, input[type="datetime-local"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        .list {
+            list-style: none;
+        }
+
+        .list-item {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: transform 0.2s;
+        }
+
+        .list-item:hover {
+            transform: translateX(5px);
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .goal-item {
+            border-left: 4px solid #667eea;
+        }
+
+        .todo-item {
+            border-left: 4px solid #ffa726;
+        }
+
+        .done-item {
+            border-left: 4px solid #66bb6a;
+            background: #f1f8f4;
+        }
+
+        .archived-done-item {
+            border-left: 4px solid #81c784;
+            background: #f1f8f4;
+            opacity: 0.85;
+        }
+
+        .archived-undone-item {
+            border-left: 4px solid #ff7043;
+            background: #fff3e0;
+        }
+
+        .overdue-item {
+            border-left: 4px solid #ef5350;
+            background: #fff5f5;
+        }
+
+        .item-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .item-text {
+            font-size: 1em;
+            line-height: 1.5;
+        }
+
+        .done-item .item-text,
+        .archived-done-item .item-text {
+            text-decoration: line-through;
+            color: #888;
+        }
+
+        .item-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85em;
+            color: #666;
+            flex-wrap: wrap;
+        }
+
+        .meta-time {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .meta-tag {
+            background: #e3f2fd;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            color: #1976d2;
+        }
+
+        .overdue-tag {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .archived-tag {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .item-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.9em;
+            border-radius: 6px;
+        }
+
+        .btn-complete {
+            background: #66bb6a;
+        }
+
+        .btn-complete:hover {
+            background: #57a35a;
+        }
+
+        .btn-delete {
+            background: #ef5350;
+        }
+
+        .btn-delete:hover {
+            background: #e03e3a;
+        }
+
+        .btn-edit {
+            background: #42a5f5;
+        }
+
+        .btn-edit:hover {
+            background: #1e88e5;
+        }
+
+        .btn-save {
+            background: #66bb6a;
+        }
+
+        .btn-save:hover {
+            background: #57a35a;
+        }
+
+        .btn-cancel {
+            background: #b0bec5;
+            color: #263238;
+        }
+
+        .btn-cancel:hover {
+            background: #90a4ae;
+        }
+
+        .btn-undo {
+            background: #ffa726;
+        }
+
+        .btn-undo:hover {
+            background: #fb8c00;
+        }
+
+        .btn-move-today {
+            background: #26a69a;
+        }
+
+        .btn-move-today:hover {
+            background: #00897b;
+        }
+
+        .btn-export {
+            background: #5c6bc0;
+        }
+
+        .btn-export:hover {
+            background: #3949ab;
+        }
+
+        .btn-import {
+            background: #7e57c2;
+        }
+
+        .btn-import:hover {
+            background: #5e35b1;
+        }
+
+        .btn-clear {
+            background: #ef5350;
+        }
+
+        .btn-clear:hover {
+            background: #e53935;
+        }
+
+        .btn-markdown {
+            background: #ab47bc;
+        }
+
+        .btn-markdown:hover {
+            background: #8e24aa;
+        }
+
+        .edit-input, .edit-time-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            font-size: 1em;
+            margin-bottom: 8px;
+        }
+
+        .edit-time-input {
+            width: auto;
+        }
+
+        .edit-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 30px;
+            font-style: italic;
+        }
+
+        .archive-notice {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            color: #856404;
+            font-size: 0.95em;
+        }
+
+        .archive-section {
+            background: #fafafa;
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+
+        .data-management {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+
+        .data-management-title {
+            color: #555;
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .success-message {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            color: #155724;
+            display: none;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            color: #721c24;
+            display: none;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+
+            .item-header {
+                flex-direction: column;
+            }
+
+            .item-actions {
+                width: 100%;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .button-group button {
+                width: 100%;
+            }
+        }
+
+        /* Tooltip for timestamps */
+        .tooltip {
+            position: relative;
+            cursor: help;
+        }
+
+        .tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            white-space: nowrap;
+            font-size: 0.8em;
+            z-index: 1000;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 My 2026 Goals</h1>
+        <p class="subtitle">Dream big, act daily, celebrate progress</p>
+        
+        <div class="quote" id="motivationalQuote">
+            "The secret of getting ahead is getting started." - Mark Twain
+        </div>
+
+        <!-- Data Management Section -->
+        <div class="data-management">
+            <h3 class="data-management-title">💾 Data Management</h3>
+            <div class="button-group">
+                <button class="btn-export" onclick="exportData()">📥 Export as JSON</button>
+                <button class="btn-markdown" onclick="exportAsMarkdown()">📝 Export as Markdown</button>
+                <button class="btn-import" onclick="document.getElementById('importFile').click()">📤 Import JSON</button>
+                <button class="btn-clear" onclick="clearAllData()">🗑️ Clear All Data</button>
+            </div>
+            <input type="file" id="importFile" accept=".json" onchange="importData(event)">
+            <div id="successMessage" class="success-message"></div>
+            <div id="errorMessage" class="error-message"></div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="stats">
+            <h3>📊 Your Progress Dashboard</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number" id="goalCount">0</div>
+                    <div class="stat-label">Life Goals</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="todoCount">0</div>
+                    <div class="stat-label">Today's Tasks</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="doneCount">0</div>
+                    <div class="stat-label">Today's Completed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="completionRate">0%</div>
+                    <div class="stat-label">Today's Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Archive Notice -->
+        <div id="archiveNotice" class="archive-notice" style="display: none;">
+            <strong>📦 Auto-archived:</strong> <span id="archiveCount">0</span> task(s) from previous days.
+        </div>
+
+        <!-- Life Goals Section -->
+        <div class="section">
+            <h2 class="section-title"><span class="emoji">🌟</span> Life Goals 2026</h2>
+            <div class="input-group">
+                <input type="text" id="goalInput" placeholder="What's your big dream for 2026?">
+                <button onclick="addGoal()">Add Goal</button>
+            </div>
+            <ul id="goalList" class="list"></ul>
+        </div>
+
+        <!-- Today's Top 3 Section -->
+        <div class="section">
+            <h2 class="section-title"><span class="emoji">⚡</span> Today's Top 3 Tasks</h2>
+            <div class="input-group">
+                <input type="text" id="todoInput" placeholder="What needs to be done today?">
+                <input type="datetime-local" id="todoTimeInput">
+                <button onclick="addTodo()">Add Task</button>
+            </div>
+            <ul id="todoList" class="list"></ul>
+        </div>
+
+        <!-- Today's Done Section -->
+        <div class="section">
+            <h2 class="section-title"><span class="emoji">✅</span> Today's Completed Tasks</h2>
+            <ul id="doneList" class="list"></ul>
+        </div>
+
+        <!-- Archive Section -->
+        <div class="section">
+            <h2 class="section-title"><span class="emoji">📦</span> Archive - Previous Days</h2>
+            
+            <div class="archive-section">
+                <h3 class="subsection-title"><span class="emoji">⏸️</span> Unfinished from Previous Days</h3>
+                <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">Tasks that were not completed before today. Click "Move to Today" to continue working on them.</p>
+                <ul id="archivedUndoneList" class="list"></ul>
+            </div>
+
+            <div class="archive-section">
+                <h3 class="subsection-title"><span class="emoji">✔️</span> Completed from Previous Days</h3>
+                <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">Tasks completed on previous days.</p>
+                <ul id="archivedDoneList" class="list"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data structures
+        let goals = [];
+        let todos = [];           // Today's todos only
+        let done = [];            // Today's completed
+        let archivedUndone = [];  // Previous days' undone
+        let archivedDone = [];    // Previous days' done
+
+        let editing = null;
+
+        // Utility: Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Utility: Format date and time
+        function formatDateTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const itemDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            
+            const timeStr = date.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false 
+            });
+            
+            const daysDiff = Math.floor((today - itemDate) / 86400000);
+            
+            if (daysDiff === 0) {
+                return `Today ${timeStr}`;
+            } else if (daysDiff === 1) {
+                return `Yesterday ${timeStr}`;
+            } else if (daysDiff <= 7) {
+                return `${daysDiff} days ago ${timeStr}`;
+            } else {
+                const dateStr = date.toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric' 
+                });
+                return `${dateStr} ${timeStr}`;
+            }
+        }
+
+        // Utility: Get full date string for tooltip
+        function getFullDateTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        }
+
+        // Utility: Check if date is today
+        function isToday(timestamp) {
+            const date = new Date(timestamp);
+            const today = new Date();
+            return date.getFullYear() === today.getFullYear() &&
+                   date.getMonth() === today.getMonth() &&
+                   date.getDate() === today.getDate();
+        }
+
+        // Show message
+        function showMessage(message, isError = false) {
+            const successEl = document.getElementById('successMessage');
+            const errorEl = document.getElementById('errorMessage');
+            
+            if (isError) {
+                errorEl.textContent = message;
+                errorEl.style.display = 'block';
+                successEl.style.display = 'none';
+                setTimeout(() => {
+                    errorEl.style.display = 'none';
+                }, 5000);
+            } else {
+                successEl.textContent = message;
+                successEl.style.display = 'block';
+                errorEl.style.display = 'none';
+                setTimeout(() => {
+                    successEl.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        // Export data to JSON file
+        function exportData() {
+            const data = {
+                version: '1.0',
+                exportDate: new Date().toISOString(),
+                goals: goals,
+                todos: todos,
+                done: done,
+                archivedUndone: archivedUndone,
+                archivedDone: archivedDone
+            };
+            
+            const dataStr = JSON.stringify(data, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `goals-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showMessage('✅ JSON data exported successfully!');
+        }
+
+        // Export data as Markdown file for Obsidian
+        function exportAsMarkdown() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            const timeStr = now.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            let markdown = `# 🎯 My 2026 Goals Tracker\n\n`;
+            markdown += `**Exported:** ${dateStr} at ${timeStr}\n\n`;
+            markdown += `---\n\n`;
+            
+            // Statistics
+            const todayTotal = done.length + todos.length;
+            const rate = todayTotal > 0 ? Math.round((done.length / todayTotal) * 100) : 0;
+            markdown += `## 📊 Statistics\n\n`;
+            markdown += `- **Life Goals:** ${goals.length}\n`;
+            markdown += `- **Today's Tasks:** ${todos.length}\n`;
+            markdown += `- **Today's Completed:** ${done.length}\n`;
+            markdown += `- **Completion Rate:** ${rate}%\n`;
+            markdown += `- **Archived Undone:** ${archivedUndone.length}\n`;
+            markdown += `- **Archived Done:** ${archivedDone.length}\n\n`;
+            markdown += `---\n\n`;
+            
+            // Life Goals
+            markdown += `## 🌟 Life Goals 2026\n\n`;
+            if (goals.length === 0) {
+                markdown += `*No goals yet*\n\n`;
+            } else {
+                goals.forEach((item, index) => {
+                    const createdTime = item.createdAt || item.id;
+                    const dateInfo = new Date(createdTime).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: 'numeric'
+                    });
+                    markdown += `${index + 1}. **${item.text}**\n`;
+                    markdown += `   - Created: ${dateInfo}\n\n`;
+                });
+            }
+            
+            markdown += `---\n\n`;
+            
+            // Today's Tasks
+            markdown += `## ⚡ Today's Top 3 Tasks\n\n`;
+            if (todos.length === 0) {
+                markdown += `*No tasks for today*\n\n`;
+            } else {
+                todos.forEach((item, index) => {
+                    const createdTime = item.createdAt || item.id;
+                    const timeInfo = new Date(createdTime).toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false
+                    });
+                    markdown += `${index + 1}. [ ] **${item.text}**\n`;
+                    markdown += `   - Time: ${timeInfo}\n\n`;
+                });
+            }
+            
+            markdown += `---\n\n`;
+            
+            // Today's Completed
+            markdown += `## ✅ Today's Completed Tasks\n\n`;
+            if (done.length === 0) {
+                markdown += `*No completed tasks today*\n\n`;
+            } else {
+                done.forEach((item, index) => {
+                    const createdTime = item.createdAt || item.id;
+                    const completedTime = item.completedAt || createdTime;
+                    const createdInfo = new Date(createdTime).toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false
+                    });
+                    const completedInfo = new Date(completedTime).toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false
+                    });
+                    markdown += `${index + 1}. [x] **${item.text}**\n`;
+                    markdown += `   - Created: ${createdInfo}\n`;
+                    markdown += `   - Completed: ${completedInfo}\n\n`;
+                });
+            }
+            
+            markdown += `---\n\n`;
+            
+            // Archived Undone
+            markdown += `## ⏸️ Unfinished from Previous Days\n\n`;
+            if (archivedUndone.length === 0) {
+                markdown += `*No unfinished tasks from previous days*\n\n`;
+            } else {
+                archivedUndone.forEach((item, index) => {
+                    const createdTime = item.createdAt || item.id;
+                    const dateInfo = new Date(createdTime).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric'
+                    });
+                    const timeInfo = new Date(createdTime).toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false
+                    });
+                    markdown += `${index + 1}. [ ] **${item.text}** ⚠️\n`;
+                    markdown += `   - Created: ${dateInfo} at ${timeInfo}\n\n`;
+                });
+            }
+            
+            markdown += `---\n\n`;
+            
+            // Archived Done
+            markdown += `## ✔️ Completed from Previous Days\n\n`;
+            if (archivedDone.length === 0) {
+                markdown += `*No completed tasks from previous days*\n\n`;
+            } else {
+                archivedDone.forEach((item, index) => {
+                    const createdTime = item.createdAt || item.id;
+                    const completedTime = item.completedAt || createdTime;
+                    const createdInfo = new Date(createdTime).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric'
+                    });
+                    const completedInfo = new Date(completedTime).toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric'
+                    });
+                    markdown += `${index + 1}. [x] **${item.text}**\n`;
+                    markdown += `   - Created: ${createdInfo}\n`;
+                    markdown += `   - Completed: ${completedInfo}\n\n`;
+                });
+            }
+            
+            markdown += `---\n\n`;
+            markdown += `*Generated by Goals Tracker 2026*\n`;
+            
+            // Download markdown file
+            const dataBlob = new Blob([markdown], { type: 'text/markdown' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `goals-tracker-${new Date().toISOString().split('T')[0]}.md`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showMessage('✅ Markdown file exported successfully! You can now view it in Obsidian.');
+        }
+
+        // Import data from JSON file
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    // Validate data structure
+                    if (!data.goals || !Array.isArray(data.goals)) {
+                        throw new Error('Invalid data format');
+                    }
+                    
+                    // Confirm before overwriting
+                    const totalItems = goals.length + todos.length + done.length + archivedUndone.length + archivedDone.length;
+                    if (totalItems > 0) {
+                        if (!confirm('⚠️ This will replace all current data. Continue?')) {
+                            event.target.value = ''; // Reset file input
+                            return;
+                        }
+                    }
+                    
+                    // Import data
+                    goals = data.goals || [];
+                    todos = data.todos || [];
+                    done = data.done || [];
+                    archivedUndone = data.archivedUndone || [];
+                    archivedDone = data.archivedDone || [];
+                    
+                    saveData();
+                    render();
+                    
+                    showMessage('✅ Data imported successfully!');
+                    event.target.value = ''; // Reset file input
+                    
+                } catch (error) {
+                    showMessage('❌ Error importing data: ' + error.message, true);
+                    event.target.value = ''; // Reset file input
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Clear all data
+        function clearAllData() {
+            const totalItems = goals.length + todos.length + done.length + archivedUndone.length + archivedDone.length;
+            
+            if (totalItems === 0) {
+                showMessage('ℹ️ No data to clear!');
+                return;
+            }
+            
+            if (confirm(`⚠️ This will permanently delete all ${totalItems} items. Are you sure?`)) {
+                goals = [];
+                todos = [];
+                done = [];
+                archivedUndone = [];
+                archivedDone = [];
+                
+                saveData();
+                render();
+                
+                showMessage('✅ All data cleared!');
+            }
+        }
+
+        // Auto-archive old todos
+        function autoArchiveOldTodos() {
+            let archivedCount = 0;
+            const remainingTodos = [];
+            
+            todos.forEach(todo => {
+                if (!isToday(todo.createdAt)) {
+                    // Move to archived undone
+                    archivedUndone.unshift(todo);
+                    archivedCount++;
+                } else {
+                    remainingTodos.push(todo);
+                }
+            });
+            
+            // Also check done list and move old completed tasks
+            const remainingDone = [];
+            done.forEach(item => {
+                const completedTime = item.completedAt || item.createdAt;
+                if (!isToday(completedTime)) {
+                    archivedDone.unshift(item);
+                    archivedCount++;
+                } else {
+                    remainingDone.push(item);
+                }
+            });
+            
+            todos = remainingTodos;
+            done = remainingDone;
+            
+            if (archivedCount > 0) {
+                showArchiveNotice(archivedCount);
+                saveData();
+            }
+        }
+
+        // Show archive notice
+        function showArchiveNotice(count) {
+            const notice = document.getElementById('archiveNotice');
+            const countSpan = document.getElementById('archiveCount');
+            countSpan.textContent = count;
+            notice.style.display = 'block';
+            
+            setTimeout(() => {
+                notice.style.display = 'none';
+            }, 5000);
+        }
+
+        // Move archived undone task to today
+        function moveToToday(id) {
+            const index = archivedUndone.findIndex(item => item.id === id);
+            if (index > -1) {
+                if (todos.length >= 3) {
+                    alert('⚡ You already have 3 tasks for today! Complete some first.');
+                    return;
+                }
+                
+                const item = archivedUndone.splice(index, 1)[0];
+                // Update creation time to now
+                item.createdAt = Date.now();
+                todos.push(item);
+                saveData();
+                render();
+            }
+        }
+
+        // Edit functionality
+        function beginEdit(listName, id) {
+            editing = { listName, id };
+            render();
+            setTimeout(() => {
+                const input = document.getElementById(`edit-input-${listName}-${id}`);
+                if (input) {
+                    input.focus();
+                    input.select();
+                }
+            }, 0);
+        }
+
+        function cancelEdit() {
+            editing = null;
+            render();
+        }
+
+        function saveEdit(listName, id) {
+            const textInput = document.getElementById(`edit-input-${listName}-${id}`);
+            const timeInput = document.getElementById(`edit-time-${listName}-${id}`);
+            const newText = textInput.value.trim();
+            
+            if (!newText) {
+                alert('Please enter some text!');
+                return;
+            }
+            
+            const listMap = {
+                'goals': goals,
+                'todos': todos,
+                'done': done,
+                'archivedUndone': archivedUndone,
+                'archivedDone': archivedDone
+            };
+            
+            const list = listMap[listName];
+            const item = list.find(item => item.id === id);
+            
+            if (item) {
+                item.text = newText;
+                if (timeInput && timeInput.value) {
+                    item.createdAt = new Date(timeInput.value).getTime();
+                }
+            }
+            
+            editing = null;
+            saveData();
+            render();
+        }
+
+        function handleEditKey(event, listName, id) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                saveEdit(listName, id);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelEdit();
+            }
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            loadData();
+            autoArchiveOldTodos();
+            setDefaultDateTime();
+            render();
+        };
+
+        // Set default datetime to current time
+        function setDefaultDateTime() {
+            const now = new Date();
+            const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+                .toISOString()
+                .slice(0, 16);
+            document.getElementById('todoTimeInput').value = localDateTime;
+        }
+
+        // Save data to localStorage
+        function saveData() {
+            localStorage.setItem('goals2026', JSON.stringify(goals));
+            localStorage.setItem('todos2026', JSON.stringify(todos));
+            localStorage.setItem('done2026', JSON.stringify(done));
+            localStorage.setItem('archivedUndone2026', JSON.stringify(archivedUndone));
+            localStorage.setItem('archivedDone2026', JSON.stringify(archivedDone));
+        }
+
+        // Load data from localStorage
+        function loadData() {
+            const savedGoals = localStorage.getItem('goals2026');
+            const savedTodos = localStorage.getItem('todos2026');
+            const savedDone = localStorage.getItem('done2026');
+            const savedArchivedUndone = localStorage.getItem('archivedUndone2026');
+            const savedArchivedDone = localStorage.getItem('archivedDone2026');
+
+            if (savedGoals) goals = JSON.parse(savedGoals);
+            if (savedTodos) todos = JSON.parse(savedTodos);
+            if (savedDone) done = JSON.parse(savedDone);
+            if (savedArchivedUndone) archivedUndone = JSON.parse(savedArchivedUndone);
+            if (savedArchivedDone) archivedDone = JSON.parse(savedArchivedDone);
+        }
+
+        // Add goal
+        function addGoal() {
+            const input = document.getElementById('goalInput');
+            const text = input.value.trim();
+            
+            if (text) {
+                const newGoal = { 
+                    id: Date.now(), 
+                    text: text,
+                    createdAt: Date.now()
+                };
+                goals.push(newGoal);
+                input.value = '';
+                saveData();
+                render();
+            }
+        }
+
+        // Add todo (with 3-item limit)
+        function addTodo() {
+            const input = document.getElementById('todoInput');
+            const timeInput = document.getElementById('todoTimeInput');
+            const text = input.value.trim();
+            
+            if (text) {
+                if (todos.length >= 3) {
+                    alert('⚡ You already have 3 tasks! Focus on finishing those first. Remember: Progress over perfection!');
+                    return;
+                }
+                
+                const timestamp = timeInput.value ? 
+                    new Date(timeInput.value).getTime() : 
+                    Date.now();
+                
+                const newTodo = { 
+                    id: Date.now(), 
+                    text: text,
+                    createdAt: timestamp
+                };
+                todos.push(newTodo);
+                input.value = '';
+                setDefaultDateTime();
+                saveData();
+                render();
+            }
+        }
+
+        // Delete item
+        function deleteItem(listName, id) {
+            const listMap = {
+                'goals': goals,
+                'todos': todos,
+                'done': done,
+                'archivedUndone': archivedUndone,
+                'archivedDone': archivedDone
+            };
+            
+            const list = listMap[listName];
+            const index = list.findIndex(item => item.id === id);
+            
+            if (index > -1) {
+                const item = list[index];
+                if (confirm(`Delete "${item.text}"?`)) {
+                    list.splice(index, 1);
+                    saveData();
+                    render();
+                }
+            }
+        }
+
+        // Complete todo (move to done)
+        function completeTodo(id) {
+            const index = todos.findIndex(item => item.id === id);
+            if (index > -1) {
+                const item = todos.splice(index, 1)[0];
+                item.completedAt = Date.now();
+                done.unshift(item);
+                saveData();
+                render();
+                celebrate();
+            }
+        }
+
+        // Undo (move from done back to todo)
+        function undoDone(id) {
+            const index = done.findIndex(item => item.id === id);
+            if (index > -1) {
+                if (todos.length >= 3) {
+                    alert('⚡ You already have 3 tasks! Complete some first before undoing.');
+                    return;
+                }
+                const item = done.splice(index, 1)[0];
+                delete item.completedAt;
+                todos.push(item);
+                saveData();
+                render();
+            }
+        }
+
+        // Celebration animation
+        function celebrate() {
+            const messages = [
+                '🎉 Nice work!',
+                '✨ You did it!',
+                '🌟 Great job!',
+                '💪 Keep going!',
+                '🎊 Awesome!'
+            ];
+            const message = messages[Math.floor(Math.random() * messages.length)];
+            
+            const quote = document.querySelector('.quote');
+            const originalText = quote.textContent;
+            quote.textContent = message;
+            quote.style.background = '#d4edda';
+            setTimeout(() => {
+                quote.textContent = originalText;
+                quote.style.background = '#f0f4ff';
+            }, 2000);
+        }
+
+        // Render all lists
+        function render() {
+            renderGoals();
+            renderTodos();
+            renderDone();
+            renderArchivedUndone();
+            renderArchivedDone();
+            updateStats();
+        }
+
+        // Render goals
+        function renderGoals() {
+            const list = document.getElementById('goalList');
+            if (goals.length === 0) {
+                list.innerHTML = '<div class="empty-state">✨ Add your first life goal! What do you want to achieve in 2026?</div>';
+                return;
+            }
+            
+            list.innerHTML = goals.map(item => {
+                const isEditing = editing && editing.listName === 'goals' && editing.id === item.id;
+                const safeText = escapeHtml(item.text);
+                const createdTime = item.createdAt || item.id;
+                const dateValue = new Date(createdTime).toISOString().slice(0, 16);
+                
+                if (isEditing) {
+                    return `
+                        <li class="list-item goal-item">
+                            <div class="edit-fields">
+                                <input class="edit-input" id="edit-input-goals-${item.id}" type="text" value="${safeText}" onkeydown="handleEditKey(event, 'goals', ${item.id})">
+                                <input class="edit-time-input" id="edit-time-goals-${item.id}" type="datetime-local" value="${dateValue}">
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-save" onclick="saveEdit('goals', ${item.id})">Save</button>
+                                <button class="btn-small btn-cancel" onclick="cancelEdit()">Cancel</button>
+                            </div>
+                        </li>
+                    `;
+                }
+                return `
+                    <li class="list-item goal-item">
+                        <div class="item-header">
+                            <div class="item-content">
+                                <span class="item-text">${safeText}</span>
+                                <div class="item-meta">
+                                    <span class="meta-time tooltip" data-tooltip="${getFullDateTime(createdTime)}">
+                                        🕐 ${formatDateTime(createdTime)}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-edit" onclick="beginEdit('goals', ${item.id})">Edit</button>
+                                <button class="btn-small btn-delete" onclick="deleteItem('goals', ${item.id})">Delete</button>
+                            </div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Render todos
+        function renderTodos() {
+            const list = document.getElementById('todoList');
+            if (todos.length === 0) {
+                list.innerHTML = '<div class="empty-state">📝 What are your top 3 tasks for today? Start with just one!</div>';
+                return;
+            }
+            
+            list.innerHTML = todos.map(item => {
+                const isEditing = editing && editing.listName === 'todos' && editing.id === item.id;
+                const safeText = escapeHtml(item.text);
+                const createdTime = item.createdAt || item.id;
+                const dateValue = new Date(createdTime).toISOString().slice(0, 16);
+                
+                if (isEditing) {
+                    return `
+                        <li class="list-item todo-item">
+                            <div class="edit-fields">
+                                <input class="edit-input" id="edit-input-todos-${item.id}" type="text" value="${safeText}" onkeydown="handleEditKey(event, 'todos', ${item.id})">
+                                <input class="edit-time-input" id="edit-time-todos-${item.id}" type="datetime-local" value="${dateValue}">
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-save" onclick="saveEdit('todos', ${item.id})">Save</button>
+                                <button class="btn-small btn-cancel" onclick="cancelEdit()">Cancel</button>
+                            </div>
+                        </li>
+                    `;
+                }
+                return `
+                    <li class="list-item todo-item">
+                        <div class="item-header">
+                            <div class="item-content">
+                                <span class="item-text">${safeText}</span>
+                                <div class="item-meta">
+                                    <span class="meta-time tooltip" data-tooltip="${getFullDateTime(createdTime)}">
+                                        🕐 ${formatDateTime(createdTime)}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-complete" onclick="completeTodo(${item.id})">✓ Done</button>
+                                <button class="btn-small btn-edit" onclick="beginEdit('todos', ${item.id})">Edit</button>
+                                <button class="btn-small btn-delete" onclick="deleteItem('todos', ${item.id})">Delete</button>
+                            </div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Render today's done
+        function renderDone() {
+            const list = document.getElementById('doneList');
+            if (done.length === 0) {
+                list.innerHTML = '<div class="empty-state">✅ Completed tasks for today will appear here. You got this!</div>';
+                return;
+            }
+            
+            list.innerHTML = done.map(item => {
+                const isEditing = editing && editing.listName === 'done' && editing.id === item.id;
+                const safeText = escapeHtml(item.text);
+                const createdTime = item.createdAt || item.id;
+                const completedTime = item.completedAt || createdTime;
+                const dateValue = new Date(createdTime).toISOString().slice(0, 16);
+                
+                if (isEditing) {
+                    return `
+                        <li class="list-item done-item">
+                            <div class="edit-fields">
+                                <input class="edit-input" id="edit-input-done-${item.id}" type="text" value="${safeText}" onkeydown="handleEditKey(event, 'done', ${item.id})">
+                                <input class="edit-time-input" id="edit-time-done-${item.id}" type="datetime-local" value="${dateValue}">
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-save" onclick="saveEdit('done', ${item.id})">Save</button>
+                                <button class="btn-small btn-cancel" onclick="cancelEdit()">Cancel</button>
+                            </div>
+                        </li>
+                    `;
+                }
+                return `
+                    <li class="list-item done-item">
+                        <div class="item-header">
+                            <div class="item-content">
+                                <span class="item-text">${safeText}</span>
+                                <div class="item-meta">
+                                    <span class="meta-time tooltip" data-tooltip="Created: ${getFullDateTime(createdTime)}">
+                                        📅 ${formatDateTime(createdTime)}
+                                    </span>
+                                    <span class="meta-time tooltip" data-tooltip="Completed: ${getFullDateTime(completedTime)}">
+                                        ✅ ${formatDateTime(completedTime)}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-undo" onclick="undoDone(${item.id})">↶ Undo</button>
+                                <button class="btn-small btn-edit" onclick="beginEdit('done', ${item.id})">Edit</button>
+                                <button class="btn-small btn-delete" onclick="deleteItem('done', ${item.id})">Delete</button>
+                            </div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Render archived undone
+        function renderArchivedUndone() {
+            const list = document.getElementById('archivedUndoneList');
+            if (archivedUndone.length === 0) {
+                list.innerHTML = '<div class="empty-state">📭 No unfinished tasks from previous days</div>';
+                return;
+            }
+            
+            list.innerHTML = archivedUndone.map(item => {
+                const isEditing = editing && editing.listName === 'archivedUndone' && editing.id === item.id;
+                const safeText = escapeHtml(item.text);
+                const createdTime = item.createdAt || item.id;
+                const dateValue = new Date(createdTime).toISOString().slice(0, 16);
+                
+                if (isEditing) {
+                    return `
+                        <li class="list-item archived-undone-item">
+                            <div class="edit-fields">
+                                <input class="edit-input" id="edit-input-archivedUndone-${item.id}" type="text" value="${safeText}" onkeydown="handleEditKey(event, 'archivedUndone', ${item.id})">
+                                <input class="edit-time-input" id="edit-time-archivedUndone-${item.id}" type="datetime-local" value="${dateValue}">
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-save" onclick="saveEdit('archivedUndone', ${item.id})">Save</button>
+                                <button class="btn-small btn-cancel" onclick="cancelEdit()">Cancel</button>
+                            </div>
+                        </li>
+                    `;
+                }
+                return `
+                    <li class="list-item archived-undone-item">
+                        <div class="item-header">
+                            <div class="item-content">
+                                <span class="item-text">${safeText}</span>
+                                <div class="item-meta">
+                                    <span class="meta-time tooltip" data-tooltip="${getFullDateTime(createdTime)}">
+                                        🕐 ${formatDateTime(createdTime)}
+                                    </span>
+                                    <span class="meta-tag archived-tag">⏸️ Not completed</span>
+                                </div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-move-today" onclick="moveToToday(${item.id})">➜ Move to Today</button>
+                                <button class="btn-small btn-edit" onclick="beginEdit('archivedUndone', ${item.id})">Edit</button>
+                                <button class="btn-small btn-delete" onclick="deleteItem('archivedUndone', ${item.id})">Delete</button>
+                            </div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Render archived done
+        function renderArchivedDone() {
+            const list = document.getElementById('archivedDoneList');
+            if (archivedDone.length === 0) {
+                list.innerHTML = '<div class="empty-state">📭 No completed tasks from previous days</div>';
+                return;
+            }
+            
+            list.innerHTML = archivedDone.map(item => {
+                const isEditing = editing && editing.listName === 'archivedDone' && editing.id === item.id;
+                const safeText = escapeHtml(item.text);
+                const createdTime = item.createdAt || item.id;
+                const completedTime = item.completedAt || createdTime;
+                const dateValue = new Date(createdTime).toISOString().slice(0, 16);
+                
+                if (isEditing) {
+                    return `
+                        <li class="list-item archived-done-item">
+                            <div class="edit-fields">
+                                <input class="edit-input" id="edit-input-archivedDone-${item.id}" type="text" value="${safeText}" onkeydown="handleEditKey(event, 'archivedDone', ${item.id})">
+                                <input class="edit-time-input" id="edit-time-archivedDone-${item.id}" type="datetime-local" value="${dateValue}">
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-save" onclick="saveEdit('archivedDone', ${item.id})">Save</button>
+                                <button class="btn-small btn-cancel" onclick="cancelEdit()">Cancel</button>
+                            </div>
+                        </li>
+                    `;
+                }
+                return `
+                    <li class="list-item archived-done-item">
+                        <div class="item-header">
+                            <div class="item-content">
+                                <span class="item-text">${safeText}</span>
+                                <div class="item-meta">
+                                    <span class="meta-time tooltip" data-tooltip="Created: ${getFullDateTime(createdTime)}">
+                                        📅 ${formatDateTime(createdTime)}
+                                    </span>
+                                    <span class="meta-time tooltip" data-tooltip="Completed: ${getFullDateTime(completedTime)}">
+                                        ✅ ${formatDateTime(completedTime)}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="item-actions">
+                                <button class="btn-small btn-edit" onclick="beginEdit('archivedDone', ${item.id})">Edit</button>
+                                <button class="btn-small btn-delete" onclick="deleteItem('archivedDone', ${item.id})">Delete</button>
+                            </div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+        }
+
+        // Update stats
+        function updateStats() {
+            document.getElementById('goalCount').textContent = goals.length;
+            document.getElementById('todoCount').textContent = todos.length;
+            document.getElementById('doneCount').textContent = done.length;
+            
+            // Calculate today's completion rate
+            const todayTotal = done.length + todos.length;
+            const rate = todayTotal > 0 ? Math.round((done.length / todayTotal) * 100) : 0;
+            document.getElementById('completionRate').textContent = rate + '%';
+        }
+
+        // Allow Enter key to add items
+        document.getElementById('goalInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') addGoal();
+        });
+
+        document.getElementById('todoInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') addTodo();
+        });
+    </script>
+</body>
+</html>
