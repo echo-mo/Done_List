@@ -2,10 +2,25 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const { MongoClient } = require('mongodb');
 
 const app = express();
 const STORAGE_FILE = path.join(__dirname, 'storage.json');
+// Zeabur injects PORT; set MONGODB_URI in Zeabur env vars for persistent storage
 const PORT = process.env.PORT || 3000;
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const DB_NAME = 'willah_db';
+const COLLECTION = 'storage';
+
+let db = null;
+
+async function getDb() {
+  if (db) return db;
+  if (!MONGODB_URI) return null;
+  const client = await MongoClient.connect(MONGODB_URI);
+  db = client.db(DB_NAME);
+  return db;
+}
 
 app.use(cors());
 app.use(express.json());
@@ -20,8 +35,7 @@ if (fs.existsSync(staticDir)) {
   console.log('Serving static files from', staticDir);
 }
 
-// localStorage 风格存储：key-value 持久化到 storage.json
-function readStorage() {
+function readStorageFile() {
   try {
     if (!fs.existsSync(STORAGE_FILE)) return {};
     const raw = fs.readFileSync(STORAGE_FILE, 'utf8');
@@ -32,7 +46,7 @@ function readStorage() {
   }
 }
 
-function writeStorage(data) {
+function writeStorageFile(data) {
   try {
     fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2), 'utf8');
     return true;
@@ -42,9 +56,38 @@ function writeStorage(data) {
   }
 }
 
-// 1. 获取：GET /api/storage 或 GET /api/storage?key=xxx
-app.get('/api/storage', (req, res) => {
-  const store = readStorage();
+async function readStorage() {
+  const database = await getDb();
+  if (!database) return readStorageFile();
+  try {
+    const col = database.collection(COLLECTION);
+    const doc = await col.findOne({ _id: 'store' });
+    return doc ? doc.data : {};
+  } catch (err) {
+    console.error('Mongo readStorage error', err);
+    return {};
+  }
+}
+
+async function writeStorage(data) {
+  const database = await getDb();
+  if (!database) return writeStorageFile(data);
+  try {
+    const col = database.collection(COLLECTION);
+    await col.updateOne(
+      { _id: 'store' },
+      { $set: { data } },
+      { upsert: true }
+    );
+    return true;
+  } catch (err) {
+    console.error('Mongo writeStorage error', err);
+    return false;
+  }
+}
+
+app.get('/api/storage', async (req, res) => {
+  const store = await readStorage();
   const key = req.query.key;
   if (key !== undefined && key !== '') {
     if (!(key in store)) return res.status(404).json({ error: 'key not found' });
@@ -53,28 +96,25 @@ app.get('/api/storage', (req, res) => {
   res.json(store);
 });
 
-// 2. 设置：POST /api/storage  body: { key, value }
-app.post('/api/storage', (req, res) => {
+app.post('/api/storage', async (req, res) => {
   const { key, value } = req.body;
   if (key === undefined || key === '') return res.status(400).json({ error: 'key required' });
-  const store = readStorage();
+  const store = await readStorage();
   store[key] = value;
-  if (!writeStorage(store)) return res.status(500).json({ error: 'failed to write' });
+  if (!(await writeStorage(store))) return res.status(500).json({ error: 'failed to write' });
   res.json({ success: true });
 });
 
-// 3. 删除：DELETE /api/storage?key=xxx
-app.delete('/api/storage', (req, res) => {
+app.delete('/api/storage', async (req, res) => {
   const key = req.query.key;
   if (key === undefined || key === '') {
-    // 4. 清空：DELETE /api/storage（无 key）
-    if (!writeStorage({})) return res.status(500).json({ error: 'failed to write' });
+    if (!(await writeStorage({}))) return res.status(500).json({ error: 'failed to write' });
     return res.json({ success: true });
   }
-  const store = readStorage();
+  const store = await readStorage();
   if (!(key in store)) return res.status(404).json({ error: 'key not found' });
   delete store[key];
-  if (!writeStorage(store)) return res.status(500).json({ error: 'failed to write' });
+  if (!(await writeStorage(store))) return res.status(500).json({ error: 'failed to write' });
   res.json({ success: true });
 });
 
@@ -82,4 +122,6 @@ app.get('/health', (req, res) => res.send('ok'));
 
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
+  if (MONGODB_URI) console.log('Using MongoDB for storage');
+  else console.log('Using file storage (set MONGODB_URI for MongoDB)');
 });
