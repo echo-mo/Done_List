@@ -1,0 +1,90 @@
+
+[Zeabur] Pod/service-69837b9b733fbd6b846841e6-dcfbd745f-k67zc - Pulling: Pulling image "registry-oci.zeabur.cloud/e-6983799386311f632dc2b113/s-69837b9b733fbd6b846841e6:d-698ffeb5c1cc55cd793cbb29"
+
+[Zeabur] Pod/service-69837b9b733fbd6b846841e6-dcfbd745f-k67zc - Pulled: Successfully pulled image "registry-oci.zeabur.cloud/e-6983799386311f632dc2b113/s-69837b9b733fbd6b846841e6:d-698ffeb5c1cc55cd793cbb29" in 1.549s (1.549s including waiting). Image size: 49201490 bytes.
+
+[Zeabur] Pod/service-69837b9b733fbd6b846841e6-dcfbd745f-k67zc - Created: Created container: my-vibe-html
+
+[Zeabur] Pod/service-69837b9b733fbd6b846841e6-dcfbd745f-k67zc - Started: Started container my-vibe-html
+
+Serving static files from /app
+
+Server listening on port 8080
+
+Using MongoDB for storage
+
+/app/node_modules/mongodb-connection-string-url/lib/index.js:85
+
+            throw new MongoParseError('Invalid scheme, expected connection string to start with "mongodb://" or "mongodb+srv://"');
+
+                  ^
+
+
+MongoParseError: Invalid scheme, expected connection string to start with "mongodb://" or "mongodb+srv://"
+
+    at new ConnectionString (/app/node_modules/mongodb-connection-string-url/lib/index.js:85:19)
+
+    at parseOptions (/app/node_modules/mongodb/lib/connection_string.js:198:17)
+
+    at new MongoClient (/app/node_modules/mongodb/lib/mongo_client.js:67:61)
+
+    at MongoClient.connect (/app/node_modules/mongodb/lib/mongo_client.js:437:24)
+
+    at getDb (/app/server.js:20:36)
+
+    at readStorage (/app/server.js:60:26)
+
+    at /app/server.js:90:23
+
+    at Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)
+
+    at next (/app/node_modules/express/lib/router/route.js:149:13)
+
+    at Route.dispatch (/app/node_modules/express/lib/router/route.js:119:3)
+
+
+Node.js v18.20.8
+
+[Zeabur] Pod/service-69837b9b733fbd6b846841e6-dcfbd745f-k67zc - Pulling: Pulling image "registry-oci.zeabur.cloud/e-6983799386311f632dc2b113/s-69837b9b733fbd6b846841e6:d-698ffeb5c1cc55cd793cbb29"
+
+[Zeabur] Pod/service-69837b9b733fbd6b846841e6-dcfbd745f-k67zc - Pulled: Successfully pulled image "registry-oci.zeabur.cloud/e-6983799386311f632dc2b113/s-69837b9b733fbd6b846841e6:d-698ffeb5c1cc55cd793cbb29" in 286ms (286ms including waiting). Image size: 49201490 bytes.
+
+[Zeabur] Pod/service-69837b9b733fbd6b846841e6-dcfbd745f-k67zc - Created: Created container: my-vibe-html
+
+[Zeabur] Pod/service-69837b9b733fbd6b846841e6-dcfbd745f-k67zc - Started: Started container my-vibe-html
+
+Serving static files from /app
+
+Server listening on port 8080
+
+Using MongoDB for storage
+
+/app/node_modules/mongodb-connection-string-url/lib/index.js:85
+
+            throw new MongoParseError('Invalid scheme, expected connection string to start with "mongodb://" or "mongodb+srv://"');
+
+                  ^
+
+
+MongoParseError: Invalid scheme, expected connection string to start with "mongodb://" or "mongodb+srv://"
+
+    at new ConnectionString (/app/node_modules/mongodb-connection-string-url/lib/index.js:85:19)
+
+    at parseOptions (/app/node_modules/mongodb/lib/connection_string.js:198:17)
+
+    at new MongoClient (/app/node_modules/mongodb/lib/mongo_client.js:67:61)
+
+    at MongoClient.connect (/app/node_modules/mongodb/lib/mongo_client.js:437:24)
+
+    at getDb (/app/server.js:20:36)
+
+    at readStorage (/app/server.js:60:26)
+
+    at /app/server.js:90:23
+
+    at Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)
+
+    at next (/app/node_modules/express/lib/router/route.js:149:13)
+
+    at Route.dispatch (/app/node_modules/express/lib/router/route.js:119:3)
+

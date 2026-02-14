@@ -8,18 +8,29 @@ const app = express();
 const STORAGE_FILE = path.join(__dirname, 'storage.json');
 // Zeabur injects PORT; set MONGODB_URI in Zeabur env vars for persistent storage
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || '';
+const RAW_URI = (process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
+const MONGODB_URI = /^mongodb(\+srv)?:\/\//i.test(RAW_URI) ? RAW_URI : '';
 const DB_NAME = 'willah_db';
 const COLLECTION = 'storage';
 
 let db = null;
+let mongoFailed = false;
 
 async function getDb() {
   if (db) return db;
-  if (!MONGODB_URI) return null;
-  const client = await MongoClient.connect(MONGODB_URI);
-  db = client.db(DB_NAME);
-  return db;
+  if (!MONGODB_URI || mongoFailed) return null;
+  try {
+    const client = await MongoClient.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000
+    });
+    db = client.db(DB_NAME);
+    console.log('MongoDB connected');
+    return db;
+  } catch (err) {
+    console.error('MongoDB connection failed, using file storage:', err.message);
+    mongoFailed = true;
+    return null;
+  }
 }
 
 app.use(cors());
@@ -120,8 +131,9 @@ app.delete('/api/storage', async (req, res) => {
 
 app.get('/health', (req, res) => res.send('ok'));
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on port ${PORT}`);
-  if (MONGODB_URI) console.log('Using MongoDB for storage');
+  if (MONGODB_URI) console.log('MONGODB_URI set, will try MongoDB for storage');
+  else if (RAW_URI) console.log('MONGODB_URI invalid (must start with mongodb:// or mongodb+srv://), using file storage');
   else console.log('Using file storage (set MONGODB_URI for MongoDB)');
 });
