@@ -2,7 +2,11 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const multer = require('multer');
+const AdmZip = require('adm-zip');
 const { MongoClient } = require('mongodb');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const app = express();
 const STORAGE_FILE = path.join(__dirname, 'storage.json');
@@ -146,6 +150,122 @@ app.delete('/api/storage', async (req, res) => {
 });
 
 app.get('/health', (req, res) => res.send('ok'));
+
+function parseDocxLines(buffer) {
+  const zip = new AdmZip(buffer);
+  const symbols = {};
+  const abstractSymbols = {};
+  try {
+    const numEntry = zip.getEntry('word/numbering.xml');
+    if (numEntry) {
+      const numXml = numEntry.getData().toString('utf8');
+      const anumBlocks = numXml.split(/<w:abstractNum\b/).slice(1);
+      for (const blk of anumBlocks) {
+        const aidM = blk.match(/abstractNumId="(\d+)"/);
+        const lvlM = blk.match(/<w:lvlText[^>]*val="([^"]*)"/);
+        if (aidM && lvlM) abstractSymbols[aidM[1]] = lvlM[1];
+      }
+      const numBlocks = numXml.split(/<w:num\b/).slice(1);
+      for (const blk of numBlocks) {
+        const nidM = blk.match(/numId="(\d+)"/);
+        const aidM = blk.match(/abstractNumId[^v]*val="(\d+)"/);
+        if (nidM && aidM && abstractSymbols[aidM[1]]) symbols[nidM[1]] = abstractSymbols[aidM[1]];
+      }
+    }
+    const docEntry = zip.getEntry('word/document.xml');
+    if (!docEntry) return [];
+    const docXml = docEntry.getData().toString('utf8');
+    const lines = [];
+    const pBlocks = docXml.split(/<w:p\b/).slice(1);
+    for (const block of pBlocks) {
+      const nidM = block.match(/numId[^v]*val="(\d+)"/);
+      const numId = nidM ? nidM[1] : null;
+      const textParts = block.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+      let text = '';
+      for (const t of textParts) text += (t[1] || '');
+      text = text.replace(/\s+/g, ' ').trim();
+      const sym = (numId && symbols[numId]) ? symbols[numId] + ' ' : '';
+      const line = (sym + text).trim();
+      if (line) lines.push(line);
+    }
+    return lines;
+  } catch (e) {
+    console.error('parseDocx error', e);
+    return [];
+  }
+}
+
+function convertLinesToTasks(lines) {
+  const DATE_RE = /^(\d{8})(?:周[一二三四五六日])?/;
+  let currentDate = null;
+  const tasks = [];
+  let total = lines.length;
+  let filtered = 0;
+  let completed = 0;
+  let uncompleted = 0;
+  for (const line of lines) {
+    const dateMatch = line.match(DATE_RE);
+    if (dateMatch) {
+      const d = dateMatch[1];
+      currentDate = d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8);
+      continue;
+    }
+    if (line.startsWith('☑ ')) {
+      const text = line.slice(2).trim();
+      if (text && currentDate) {
+        tasks.push({ text, date: currentDate, completed: true });
+        completed++;
+      } else filtered++;
+      continue;
+    }
+    if (line.startsWith('☐ ')) {
+      const text = line.slice(2).trim();
+      if (text && currentDate) {
+        tasks.push({ text, date: currentDate, completed: false });
+        uncompleted++;
+      } else filtered++;
+      continue;
+    }
+    filtered++;
+  }
+  return { tasks, stats: { total, valid: total - filtered, filtered, completed, uncompleted } };
+}
+
+app.post('/api/import', upload.single('file'), async (req, res) => {
+  if (!req.file || !req.file.buffer) {
+    return res.status(400).json({ error: '请选择 .docx 文件' });
+  }
+  const ext = path.extname(req.file.originalname || '').toLowerCase();
+  if (ext !== '.docx') {
+    return res.status(400).json({ error: '仅支持 .docx 格式' });
+  }
+  const lines = parseDocxLines(req.file.buffer);
+  const { tasks, stats } = convertLinesToTasks(lines);
+  const store = await readStorage();
+  const todoList = Array.isArray(store.todoList) ? store.todoList : [];
+  const existingIds = new Set(todoList.map(t => t.id));
+  let nextId = Date.now();
+  for (const t of tasks) {
+    while (existingIds.has(nextId)) nextId++;
+    todoList.push({ id: nextId, text: t.text, date: t.date, completed: t.completed });
+    existingIds.add(nextId);
+    nextId++;
+  }
+  store.todoList = todoList;
+  if (!(await writeStorage(store))) {
+    return res.status(500).json({ error: '写入失败' });
+  }
+  res.json({
+    success: true,
+    stats: {
+      total: stats.total,
+      valid: stats.valid,
+      filtered: stats.filtered,
+      uncompleted: stats.uncompleted,
+      completed: stats.completed
+    }
+  });
+});
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on port ${PORT}`);
