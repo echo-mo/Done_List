@@ -28,6 +28,7 @@ async function getDb() {
     return db;
   } catch (err) {
     console.error('MongoDB connection failed, using file storage:', err.message);
+    console.error('MongoDB full error:', err.toString());
     mongoFailed = true;
     return null;
   }
@@ -101,11 +102,14 @@ app.get('/api/storage/status', async (req, res) => {
   const db = await getDb();
   const store = await readStorage();
   const taskCount = Array.isArray(store.todoList) ? store.todoList.length : 0;
+  const hasUri = !!(process.env.MONGODB_URI || '').trim();
+  const uriValid = /^mongodb(\+srv)?:\/\//i.test((process.env.MONGODB_URI || '').trim());
   res.json({
     storage: db ? 'MongoDB' : 'file',
     mongodbConnected: !!db,
     taskCount,
-    hasData: taskCount > 0
+    hasData: taskCount > 0,
+    debug: { hasUri, uriValid, mongoFailed }
   });
 });
 
