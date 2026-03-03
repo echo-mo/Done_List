@@ -164,6 +164,16 @@
     .edit-fields { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
     .edit-fields input[type="text"], .edit-fields input[type="date"] { padding: 10px; border: 2px solid #667eea; border-radius: 10px; font-size: 1em; }
 
+    .query-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
+    .query-row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+    .query-row label { font-size: 0.9em; color: #666; }
+    .query-row input[type="date"] { padding: 10px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 1em; }
+    .query-results { min-height: 20px; }
+    .query-results .task { margin-bottom: 10px; }
+    .query-results .query-empty { color: #888; font-style: italic; padding: 15px 0; }
+    .query-results .query-group { margin-bottom: 20px; }
+    .query-results .query-group-title { font-size: 1em; color: #764ba2; margin-bottom: 10px; }
+
     /* 手机端：与参考 HTML 一致 */
     @media (max-width: 768px) {
       body { padding: 20px; }
@@ -178,6 +188,9 @@
       .btn-add { width: 100%; }
       .task { flex-direction: column; align-items: flex-start; }
       .actions { width: 100%; }
+      .query-row { flex-direction: column; align-items: stretch; }
+      .query-row input[type="date"] { width: 100%; }
+      .query-row #btn-query { width: 100%; }
     }
     @media (max-width: 380px) {
       body { padding: 12px; }
@@ -228,6 +241,18 @@
       <div class="done-section">
         <h2 class="section-title">✅ Today's Completed Tasks</h2>
         <ul class="done-list" id="done-list" aria-live="polite"></ul>
+      </div>
+
+      <div class="query-section">
+        <h2 class="section-title">🔍 任务查询</h2>
+        <div class="query-row">
+          <label for="query-start">开始日期</label>
+          <input id="query-start" type="date">
+          <label for="query-end">结束日期</label>
+          <input id="query-end" type="date">
+          <button class="btn-add" id="btn-query">查询</button>
+        </div>
+        <div id="query-results" class="query-results"></div>
       </div>
     </section>
   </div>
@@ -386,13 +411,14 @@
       }
     });
 
-    function startEdit(li) {
+    function startEdit(li, opts) {
       const textEl = li.querySelector('.task-text');
       const currentText = textEl ? textEl.textContent : '';
       const currentDate = li.dataset.createdAt || todayStr();
       const actions = li.querySelector('.actions');
       const content = li.querySelector('.task-content');
       if (!content || !actions) return;
+      const onBeforeSave = opts?.onBeforeSave;
       const wrap = document.createElement('div');
       wrap.className = 'edit-fields';
       const inputText = document.createElement('input');
@@ -421,6 +447,7 @@
         content.querySelector('.task-date').textContent = li.dataset.createdAt;
         li.removeChild(wrap);
         li.appendChild(actions);
+        if (onBeforeSave) onBeforeSave(li);
         if (API_BASE) await saveTasksToServer().catch(() => {});
         else saveTasks();
         updateStats();
@@ -469,13 +496,23 @@
     }
 
     function saveTasks() {
-      const tasks = getTasksSnapshot();
+      mergeTodayIntoCache();
       try {
-        localStorage.setItem('todoList', JSON.stringify(tasks));
+        localStorage.setItem('todoList', JSON.stringify(allTasksCache));
       } catch (err) {
         // localStorage 写入可能在隐私模式或存储被禁用时失败，这里静默处理
         console.warn('Could not save to localStorage:', err);
       }
+    }
+
+    function mergeTodayIntoCache() {
+      const today = todayStr();
+      function isTodayTask(t) {
+        return t.createdAt === today || (t.completed && t.completedAt && t.completedAt.slice(0, 10) === today);
+      }
+      const todayFromDom = getTasksSnapshot();
+      const rest = allTasksCache.filter(t => !isTodayTask(t));
+      allTasksCache = rest.concat(todayFromDom);
     }
 
     /**
@@ -486,25 +523,33 @@
       try {
         const raw = localStorage.getItem('todoList');
         if (!raw) {
+          allTasksCache = [];
           taskList.innerHTML = '';
           updateStats();
+          restoreAndRunQuery();
           return;
         }
         const tasks = JSON.parse(raw);
         if (!Array.isArray(tasks)) throw new Error('格式不正确');
 
+        allTasksCache = tasks;
         applyTasks(tasks);
+        restoreAndRunQuery();
       } catch (err) {
         console.warn('Failed to load from localStorage, starting with empty list:', err);
+        allTasksCache = [];
         taskList.innerHTML = '';
         const dl = document.getElementById('done-list');
         if (dl) dl.innerHTML = '';
+        restoreAndRunQuery();
       }
     }
 
-    const API_BASE = 'https://willah.zeabur.app'; // 空字符串则仅用 localStorage；设为后端地址启用多端同步
+    const API_BASE = (typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1'))
+      ? (location.origin || '') : 'https://willah.zeabur.app'; // 本地用当前 origin，否则用 zeabur
     const SYNC_INTERVAL_MS = 3000; // 轮询间隔，多端实时更新
     let syncTimer = null;
+    let allTasksCache = []; // 全量任务缓存，用于查询与合并保存
 
     (async function init() {
       if (API_BASE) {
@@ -522,10 +567,12 @@
     async function loadTasksFromServer() {
       const res = await fetch(API_BASE + '/api/storage?key=todoList');
       if (res.status === 404) {
+        allTasksCache = [];
         taskList.innerHTML = '';
         const dl = document.getElementById('done-list');
         if (dl) dl.innerHTML = '';
         updateStats();
+        restoreAndRunQuery();
         return;
       }
       if (!res.ok) throw new Error('fetch failed');
@@ -538,15 +585,17 @@
         updateStats();
         return;
       }
+      allTasksCache = tasks;
       applyTasks(tasks);
+      restoreAndRunQuery();
     }
 
     async function saveTasksToServer() {
-      const tasks = getTasksSnapshot();
+      mergeTodayIntoCache();
       const res = await fetch(API_BASE + '/api/storage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'todoList', value: tasks })
+        body: JSON.stringify({ key: 'todoList', value: allTasksCache })
       });
       if (!res.ok) throw new Error('save failed');
     }
@@ -630,6 +679,193 @@
       updateStats();
     }
 
+    const QUERY_STORAGE_KEY = 'taskQueryState';
+
+    function runQuery(startDate, endDate) {
+      const start = startDate || '';
+      const end = endDate || '';
+      const today = todayStr();
+      const tasks = allTasksCache.filter(t => {
+        const d = t.createdAt || '';
+        if (d >= today) return false;
+        if (!start && !end) return true;
+        if (start && end) return d >= start && d <= end;
+        if (start) return d >= start;
+        return d <= end;
+      });
+      renderQueryResults(tasks);
+      try {
+        sessionStorage.setItem(QUERY_STORAGE_KEY, JSON.stringify({ start, end, tasks }));
+      } catch (e) {}
+    }
+
+    function renderQueryResults(tasks) {
+      const container = document.getElementById('query-results');
+      if (!container) return;
+      container.innerHTML = '';
+      if (tasks.length === 0) {
+        container.innerHTML = '<p class="query-empty">暂无符合条件的任务</p>';
+        return;
+      }
+      const completed = tasks.filter(t => t.completed);
+      const uncompleted = tasks.filter(t => !t.completed);
+      if (uncompleted.length > 0) {
+        const g = document.createElement('div');
+        g.className = 'query-group';
+        g.innerHTML = '<div class="query-group-title">未完成任务</div>';
+        const ul = document.createElement('ul');
+        ul.className = 'task-list';
+        uncompleted.forEach(t => ul.appendChild(createQueryTaskElement(t)));
+        g.appendChild(ul);
+        container.appendChild(g);
+      }
+      if (completed.length > 0) {
+        const g = document.createElement('div');
+        g.className = 'query-group';
+        g.innerHTML = '<div class="query-group-title">已完成任务</div>';
+        const ul = document.createElement('ul');
+        ul.className = 'task-list';
+        completed.forEach(t => ul.appendChild(createQueryTaskElement(t, true)));
+        g.appendChild(ul);
+        container.appendChild(g);
+      }
+    }
+
+    function createQueryTaskElement(t, isCompleted) {
+      const li = createTaskElement(t.text, isCompleted, t.createdAt, t.completedAt, t.id);
+      li.dataset.id = String(t.id);
+      const actions = li.querySelector('.actions');
+      if (!actions) return li;
+      actions.innerHTML = '';
+      if (isCompleted) {
+        const undoBtn = document.createElement('button');
+        undoBtn.type = 'button';
+        undoBtn.className = 'btn-undo';
+        undoBtn.textContent = 'Undo';
+        actions.appendChild(undoBtn);
+        undoBtn.onclick = () => undoQueryTask(li);
+      } else {
+        const doneBtn = document.createElement('button');
+        doneBtn.type = 'button';
+        doneBtn.className = 'btn-complete';
+        doneBtn.textContent = 'Done';
+        actions.appendChild(doneBtn);
+        doneBtn.onclick = () => completeQueryTask(li);
+      }
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn-edit';
+      editBtn.textContent = 'Edit';
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn-delete';
+      deleteBtn.textContent = 'Delete';
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+      editBtn.onclick = () => startEditQueryTask(li);
+      deleteBtn.onclick = () => deleteQueryTask(li);
+      return li;
+    }
+
+    function completeQueryTask(li) {
+      const id = li.dataset.id;
+      const idx = allTasksCache.findIndex(t => String(t.id) === id);
+      if (idx >= 0) {
+        allTasksCache[idx].completed = true;
+        allTasksCache[idx].completedAt = todayStr();
+      }
+      if (API_BASE) saveTasksToServer().catch(() => {});
+      else saveTasks();
+      applyTasks(allTasksCache);
+      const state = getQueryState();
+      if (state) runQuery(state.start, state.end);
+      updateStats();
+    }
+
+    function startEditQueryTask(li) {
+      startEdit(li, {
+        onBeforeSave: (el) => {
+          const id = el.dataset.id;
+          const newText = el.querySelector('.task-text')?.textContent || '';
+          const newDate = el.dataset.createdAt || todayStr();
+          const idx = allTasksCache.findIndex(t => String(t.id) === id);
+          if (idx >= 0) {
+            allTasksCache[idx].text = newText;
+            allTasksCache[idx].createdAt = newDate;
+          }
+          const mainLi = taskList.querySelector(`li[data-id="${id}"]`) || document.getElementById('done-list')?.querySelector(`li[data-id="${id}"]`);
+          if (mainLi) {
+            mainLi.dataset.createdAt = newDate;
+            const t = mainLi.querySelector('.task-text');
+            const d = mainLi.querySelector('.task-date');
+            if (t) t.textContent = newText;
+            if (d) d.textContent = newDate;
+          }
+        }
+      });
+      const saveBtn = li.querySelector('.btn-save');
+      if (saveBtn) {
+        const origOnclick = saveBtn.onclick;
+        saveBtn.onclick = async function() {
+          if (origOnclick) await origOnclick.call(this);
+          const state = getQueryState();
+          if (state) runQuery(state.start, state.end);
+        };
+      }
+    }
+
+    function deleteQueryTask(li) {
+      const id = li.dataset.id;
+      allTasksCache = allTasksCache.filter(t => String(t.id) !== id);
+      const mainLi = taskList.querySelector(`li[data-id="${id}"]`) || document.getElementById('done-list')?.querySelector(`li[data-id="${id}"]`);
+      if (mainLi) mainLi.remove();
+      if (API_BASE) saveTasksToServer().catch(() => {});
+      else saveTasks();
+      li.remove();
+      const state = getQueryState();
+      if (state) runQuery(state.start, state.end);
+      updateStats();
+    }
+
+    function undoQueryTask(li) {
+      const id = li.dataset.id;
+      const idx = allTasksCache.findIndex(t => String(t.id) === id);
+      if (idx >= 0) {
+        allTasksCache[idx].completed = false;
+        allTasksCache[idx].completedAt = null;
+      }
+      if (API_BASE) saveTasksToServer().catch(() => {});
+      else saveTasks();
+      applyTasks(allTasksCache);
+      const state = getQueryState();
+      if (state) runQuery(state.start, state.end);
+      updateStats();
+    }
+
+    function getQueryState() {
+      try {
+        const raw = sessionStorage.getItem(QUERY_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) { return null; }
+    }
+
+    function restoreAndRunQuery() {
+      const endInput = document.getElementById('query-end');
+      if (endInput && !endInput.value) endInput.value = todayStr();
+      const state = getQueryState();
+      if (!state || (!state.start && !state.end)) return;
+      const startInput = document.getElementById('query-start');
+      if (startInput) startInput.value = state.start || '';
+      if (endInput) endInput.value = state.end || '';
+      runQuery(state.start, state.end);
+    }
+
+    document.getElementById('btn-query')?.addEventListener('click', function() {
+      const start = document.getElementById('query-start')?.value || '';
+      const end = document.getElementById('query-end')?.value || '';
+      runQuery(start, end);
+    });
+
     async function pollAndMergeTasks() {
       if (!API_BASE) return;
       try {
@@ -639,10 +875,14 @@
         const data = await res.json();
         const remote = data.value;
         if (!Array.isArray(remote)) return;
+        allTasksCache = remote;
         const local = getTasksSnapshot();
         const localStr = JSON.stringify(local);
         const remoteStr = JSON.stringify(remote);
-        if (remoteStr !== localStr) applyTasks(remote);
+        if (remoteStr !== localStr) {
+          applyTasks(remote);
+          restoreAndRunQuery();
+        }
       } catch (err) {
         console.warn('Poll sync failed:', err);
       }
