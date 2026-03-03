@@ -220,11 +220,11 @@
           </div>
           <div class="stat-item">
             <div class="stat-number" id="statCompleted">0</div>
-            <div class="stat-label">2026's Completed Tasks</div>
+            <div class="stat-label" id="statCompletedLabel">2026's Completed Tasks</div>
           </div>
           <div class="stat-item">
             <div class="stat-number" id="statRate">0%</div>
-            <div class="stat-label">2026's Execution</div>
+            <div class="stat-label" id="statRateLabel">2026's Execution</div>
           </div>
         </div>
       </div>
@@ -551,6 +551,14 @@
     let syncTimer = null;
     let allTasksCache = []; // 全量任务缓存，用于查询与合并保存
 
+    (function initStatLabels() {
+      const y = (new Date()).getFullYear();
+      const el1 = document.getElementById('statCompletedLabel');
+      const el2 = document.getElementById('statRateLabel');
+      if (el1) el1.textContent = y + "'s Completed Tasks";
+      if (el2) el2.textContent = y + "'s Execution";
+    })();
+
     (async function init() {
       if (API_BASE) {
         try {
@@ -621,16 +629,21 @@
     }
 
     function updateStats() {
-      const tasks = getTasksSnapshot();
-      const total = tasks.length;
-      const completed = tasks.filter(t => t.completed).length;
-      const rate = total ? Math.round(completed / total * 100) : 0;
+      const today = todayStr();
+      const year = String((new Date()).getFullYear());
+      const tasks = allTasksCache;
+      const todayTasks = tasks.filter(t => (t.createdAt || '').slice(0, 10) === today);
+      const yearTasks = tasks.filter(t => (t.createdAt || '').startsWith(year));
+      const yearCompleted = tasks.filter(t => t.completed && (t.completedAt || '').startsWith(year));
+      const todayTotal = todayTasks.length;
+      const yearCompletedCount = yearCompleted.length;
+      const yearRate = yearTasks.length ? Math.round(yearCompletedCount / yearTasks.length * 100) : 0;
       const elTotal = document.getElementById('statTotal');
       const elCompleted = document.getElementById('statCompleted');
       const elRate = document.getElementById('statRate');
-      if (elTotal) elTotal.textContent = total;
-      if (elCompleted) elCompleted.textContent = completed;
-      if (elRate) elRate.textContent = rate + '%';
+      if (elTotal) elTotal.textContent = todayTotal;
+      if (elCompleted) elCompleted.textContent = yearCompletedCount;
+      if (elRate) elRate.textContent = yearRate + '%';
     }
 
     function applyTasks(tasks) {
