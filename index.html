@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Willah's Done List</title>
   <meta name="description" content="Dream big, act daily, get things done.">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; }
@@ -174,6 +175,13 @@
     .query-results .query-group { margin-bottom: 20px; }
     .query-results .query-group-title { font-size: 1em; color: #764ba2; margin-bottom: 10px; }
 
+    .import-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
+    .import-row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+    .import-row input[type="file"] { flex: 1; min-width: 150px; padding: 8px; }
+    .import-result { padding: 15px; background: #f8f9ff; border-radius: 10px; font-size: 0.95em; line-height: 1.6; }
+    .import-result.error { background: #ffebee; color: #c62828; }
+    .import-result.success { background: #e8f5e9; color: #2e7d32; }
+
     /* 手机端：与参考 HTML 一致 */
     @media (max-width: 768px) {
       body { padding: 20px; }
@@ -191,6 +199,9 @@
       .query-row { flex-direction: column; align-items: stretch; }
       .query-row input[type="date"] { width: 100%; }
       .query-row #btn-query { width: 100%; }
+      .import-row { flex-direction: column; align-items: stretch; }
+      .import-row input[type="file"] { width: 100%; }
+      .import-row #btn-import { width: 100%; }
     }
     @media (max-width: 380px) {
       body { padding: 12px; }
@@ -253,6 +264,15 @@
           <button class="btn-add" id="btn-query">查询</button>
         </div>
         <div id="query-results" class="query-results"></div>
+      </div>
+
+      <div class="import-section">
+        <h2 class="section-title">📥 历史记录导入</h2>
+        <div class="import-row">
+          <input id="import-file" type="file" accept=".docx">
+          <button class="btn-add" id="btn-import">确定</button>
+        </div>
+        <div id="import-result" class="import-result"></div>
       </div>
     </section>
   </div>
@@ -544,8 +564,7 @@
       }
     }
 
-    const API_BASE = (typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1'))
-      ? (location.origin || '') : 'https://willah.zeabur.app'; // 本地用当前 origin，否则用 zeabur
+    const API_BASE = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
     const SYNC_INTERVAL_MS = 3000; // 轮询间隔，多端实时更新
     let syncTimer = null;
     let allTasksCache = []; // 全量任务缓存，用于查询与合并保存
@@ -573,32 +592,25 @@
 
     async function loadTasksFromServer() {
       const res = await fetch(API_BASE + '/api/storage?key=todoList');
-      if (res.status === 404) {
-        allTasksCache = [];
-        taskList.innerHTML = '';
-        const dl = document.getElementById('done-list');
-        if (dl) dl.innerHTML = '';
-        updateStats();
-        restoreAndRunQuery();
+      if (res.status === 404 || !res.ok) {
+        loadTasks();
         return;
       }
-      if (!res.ok) throw new Error('fetch failed');
       const data = await res.json();
       const tasks = data.value;
       if (!Array.isArray(tasks)) {
-        taskList.innerHTML = '';
-        const dl = document.getElementById('done-list');
-        if (dl) dl.innerHTML = '';
-        updateStats();
+        loadTasks();
         return;
       }
       allTasksCache = tasks.map(normalizeTask);
       applyTasks(allTasksCache);
       restoreAndRunQuery();
+      try { localStorage.setItem('todoList', JSON.stringify(allTasksCache)); } catch (e) {}
     }
 
     async function saveTasksToServer() {
       mergeTodayIntoCache();
+      try { localStorage.setItem('todoList', JSON.stringify(allTasksCache)); } catch (e) {}
       const res = await fetch(API_BASE + '/api/storage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -838,10 +850,7 @@
     function undoQueryTask(li) {
       const id = li.dataset.id;
       const idx = allTasksCache.findIndex(t => String(t.id) === id);
-      if (idx >= 0) {
-        allTasksCache[idx].completed = false;
-        allTasksCache[idx].completed = false;
-      }
+      if (idx >= 0) allTasksCache[idx].completed = false;
       if (API_BASE) saveTasksToServer().catch(() => {});
       else saveTasks();
       applyTasks(allTasksCache);
@@ -872,6 +881,102 @@
       const start = document.getElementById('query-start')?.value || '';
       const end = document.getElementById('query-end')?.value || '';
       runQuery(start, end);
+    });
+
+    document.getElementById('btn-import')?.addEventListener('click', async function() {
+      const fileInput = document.getElementById('import-file');
+      const resultEl = document.getElementById('import-result');
+      if (!fileInput?.files?.length || !resultEl) return;
+      const file = fileInput.files[0];
+      if (!file.name.toLowerCase().endsWith('.docx')) {
+        resultEl.className = 'import-result error';
+        resultEl.textContent = '请选择 .docx 格式文件';
+        return;
+      }
+      resultEl.textContent = '导入中...';
+      resultEl.className = 'import-result';
+      try {
+        const buf = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+        const symbols = {};
+        const abstractSymbols = {};
+        const numEntry = zip.file('word/numbering.xml');
+        if (numEntry) {
+          const numXml = await numEntry.async('string');
+          const anumBlocks = numXml.split(/<w:abstractNum\b/).slice(1);
+          for (const blk of anumBlocks) {
+            const aidM = blk.match(/abstractNumId="(\d+)"/);
+            const lvlM = blk.match(/<w:lvlText[^>]*val="([^"]*)"/);
+            if (aidM && lvlM) abstractSymbols[aidM[1]] = lvlM[1];
+          }
+          const numBlocks = numXml.split(/<w:num\b/).slice(1);
+          for (const blk of numBlocks) {
+            const nidM = blk.match(/numId="(\d+)"/);
+            const aidM = blk.match(/abstractNumId[^v]*val="(\d+)"/);
+            if (nidM && aidM && abstractSymbols[aidM[1]]) symbols[nidM[1]] = abstractSymbols[aidM[1]];
+          }
+        }
+        const docEntry = zip.file('word/document.xml');
+        if (!docEntry) throw new Error('无效的 docx 文件');
+        const docXml = await docEntry.async('string');
+        const lines = [];
+        const pBlocks = docXml.split(/<w:p\b/).slice(1);
+        for (const block of pBlocks) {
+          const nidM = block.match(/numId[^v]*val="(\d+)"/);
+          const numId = nidM ? nidM[1] : null;
+          const textParts = block.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+          let text = '';
+          for (const t of textParts) text += (t[1] || '');
+          text = text.replace(/\s+/g, ' ').trim();
+          const sym = (numId && symbols[numId]) ? symbols[numId] + ' ' : '';
+          const line = (sym + text).trim();
+          if (line) lines.push(line);
+        }
+        const DATE_RE = /^(\d{8})(?:周[一二三四五六日])?/;
+        let currentDate = null;
+        const tasks = [];
+        let total = lines.length, filtered = 0, completed = 0, uncompleted = 0;
+        for (const line of lines) {
+          const dateMatch = line.match(DATE_RE);
+          if (dateMatch) {
+            const d = dateMatch[1];
+            currentDate = d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6, 8);
+            continue;
+          }
+          if (line.startsWith('☑ ')) {
+            const text = line.slice(2).trim();
+            if (text && currentDate) { tasks.push({ text, date: currentDate, completed: true }); completed++; }
+            else filtered++;
+            continue;
+          }
+          if (line.startsWith('☐ ')) {
+            const text = line.slice(2).trim();
+            if (text && currentDate) { tasks.push({ text, date: currentDate, completed: false }); uncompleted++; }
+            else filtered++;
+            continue;
+          }
+          filtered++;
+        }
+        const existingIds = new Set(allTasksCache.map(t => t.id));
+        let nextId = Date.now();
+        for (const t of tasks) {
+          while (existingIds.has(nextId)) nextId++;
+          allTasksCache.push({ id: nextId, text: t.text, date: t.date, completed: t.completed });
+          existingIds.add(nextId);
+          nextId++;
+        }
+        if (API_BASE) await saveTasksToServer();
+        else saveTasks();
+        resultEl.className = 'import-result success';
+        resultEl.innerHTML = '总数据行数=' + total + '<br>有效数据行数=' + (total - filtered) + '<br>被过滤的数据行数=' + filtered + '<br>导入的未完成任务数=' + uncompleted + '<br>导入的已完成任务数=' + completed;
+        fileInput.value = '';
+        applyTasks(allTasksCache);
+        updateStats();
+        restoreAndRunQuery();
+      } catch (e) {
+        resultEl.className = 'import-result error';
+        resultEl.textContent = '导入失败：' + (e.message || '解析错误');
+      }
     });
 
     async function pollAndMergeTasks() {
