@@ -3,16 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const { MongoClient } = require('mongodb');
+const multer = require('multer');
+const AdmZip = require('adm-zip');
 
-let multer, AdmZip, upload;
-try {
-  multer = require('multer');
-  AdmZip = require('adm-zip');
-  upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-} catch (e) {
-  console.warn('Import deps not available, /api/import disabled:', e.message);
-}
-
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const app = express();
 const STORAGE_FILE = path.join(__dirname, 'storage.json');
 // Zeabur injects PORT; set MONGODB_URI in Zeabur env vars for persistent storage
@@ -156,7 +150,6 @@ app.delete('/api/storage', async (req, res) => {
 
 app.get('/health', (req, res) => res.send('ok'));
 
-if (upload && AdmZip) {
 function parseDocxLines(buffer) {
   const zip = new AdmZip(buffer);
   const symbols = {};
@@ -272,11 +265,6 @@ app.post('/api/import', upload.single('file'), async (req, res) => {
     }
   });
 });
-} else {
-  app.post('/api/import', (req, res) => {
-    res.status(503).json({ error: '历史记录导入功能不可用，请检查依赖是否已安装' });
-  });
-}
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on port ${PORT}`);
