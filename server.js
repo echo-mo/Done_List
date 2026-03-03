@@ -131,6 +131,18 @@ app.delete('/api/storage', async (req, res) => {
 
 app.get('/health', (req, res) => res.send('ok'));
 
+app.get('/api/storage/status', async (req, res) => {
+  const db = await getDb();
+  const store = await readStorage();
+  const taskCount = Array.isArray(store.todoList) ? store.todoList.length : 0;
+  res.json({
+    storage: db ? 'MongoDB' : 'file',
+    mongodbConnected: !!db,
+    taskCount,
+    hasData: taskCount > 0
+  });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on port ${PORT}`);
   if (MONGODB_URI) console.log('MONGODB_URI set, will try MongoDB for storage');

@@ -270,19 +270,18 @@
     const taskList = document.querySelector('.task-list'); // 任务列表容器
 
     function todayStr() { return new Date().toISOString().slice(0, 10); }
-    function isCompletedToday(completedAt) {
-      if (!completedAt) return true;
-      return completedAt.slice(0, 10) === todayStr();
+    function normalizeTask(t) {
+      const date = (t.date || t.createdAt || t.completedAt || todayStr()).toString().slice(0, 10);
+      return { id: t.id, text: t.text || '', completed: Boolean(t.completed), date };
     }
 
-    function createTaskElement(text, completed, createdAt, completedAt, id) {
+    function createTaskElement(text, completed, date, id) {
       if (id == null) id = Date.now();
-      if (!createdAt) createdAt = todayStr();
+      if (!date) date = todayStr();
       const li = document.createElement('li');
       li.className = 'task';
       li.dataset.id = String(id);
-      li.dataset.createdAt = createdAt;
-      li.dataset.completedAt = completedAt || '';
+      li.dataset.date = date;
       if (completed) li.classList.add('completed');
 
       const content = document.createElement('div');
@@ -292,7 +291,7 @@
       span.textContent = text;
       const dateSpan = document.createElement('div');
       dateSpan.className = 'task-date';
-      dateSpan.textContent = createdAt;
+      dateSpan.textContent = date;
       content.appendChild(span);
       content.appendChild(dateSpan);
 
@@ -324,9 +323,9 @@
     async function addTask() {
       const text = taskInput.value.trim();
       if (!text) return;
-      const createdAt = todayStr();
+      const date = todayStr();
       const id = Date.now();
-      const taskItem = createTaskElement(text, false, createdAt, null, id);
+      const taskItem = createTaskElement(text, false, date, id);
       taskList.appendChild(taskItem);
       // 清空并聚焦输入框，方便继续添加
       taskInput.value = '';
@@ -371,7 +370,6 @@
         const li = target.closest('li.task');
         const doneList = document.getElementById('done-list');
         if (li && doneList && taskList.contains(li)) {
-          li.dataset.completedAt = todayStr();
           li.classList.add('completed');
           const content = li.querySelector('.task-content');
           if (content) {
@@ -414,7 +412,7 @@
     function startEdit(li, opts) {
       const textEl = li.querySelector('.task-text');
       const currentText = textEl ? textEl.textContent : '';
-      const currentDate = li.dataset.createdAt || todayStr();
+      const currentDate = li.dataset.date || todayStr();
       const actions = li.querySelector('.actions');
       const content = li.querySelector('.task-content');
       if (!content || !actions) return;
@@ -441,10 +439,10 @@
       saveBtn.onclick = async function() {
         const newText = inputText.value.trim();
         if (!newText) return;
-        li.dataset.createdAt = inputDate.value || todayStr();
+        li.dataset.date = inputDate.value || todayStr();
         content.style.display = '';
         content.querySelector('.task-text').textContent = newText;
-        content.querySelector('.task-date').textContent = li.dataset.createdAt;
+        content.querySelector('.task-date').textContent = li.dataset.date;
         li.removeChild(wrap);
         li.appendChild(actions);
         if (onBeforeSave) onBeforeSave(li);
@@ -477,9 +475,9 @@
         if (target.classList.contains('btn-undo')) {
           const id = li.dataset.id;
           const text = li.querySelector('.task-text')?.textContent || '';
-          const createdAt = li.dataset.createdAt || todayStr();
+          const date = li.dataset.date || todayStr();
           doneListEl.removeChild(li);
-          const newLi = createTaskElement(text, false, createdAt, null, id);
+          const newLi = createTaskElement(text, false, date, id);
           taskList.appendChild(newLi);
           if (API_BASE) await saveTasksToServer().catch(() => {});
           else saveTasks();
@@ -508,11 +506,12 @@
     function mergeTodayIntoCache() {
       const today = todayStr();
       function isTodayTask(t) {
-        return t.createdAt === today || (t.completed && t.completedAt && t.completedAt.slice(0, 10) === today);
+        const d = (t.date || t.createdAt || '').toString().slice(0, 10);
+        return d === today;
       }
       const todayFromDom = getTasksSnapshot();
       const rest = allTasksCache.filter(t => !isTodayTask(t));
-      allTasksCache = rest.concat(todayFromDom);
+      allTasksCache = rest.concat(todayFromDom).map(normalizeTask);
     }
 
     /**
@@ -532,8 +531,8 @@
         const tasks = JSON.parse(raw);
         if (!Array.isArray(tasks)) throw new Error('格式不正确');
 
-        allTasksCache = tasks;
-        applyTasks(tasks);
+        allTasksCache = tasks.map(normalizeTask);
+        applyTasks(allTasksCache);
         restoreAndRunQuery();
       } catch (err) {
         console.warn('Failed to load from localStorage, starting with empty list:', err);
@@ -593,8 +592,8 @@
         updateStats();
         return;
       }
-      allTasksCache = tasks;
-      applyTasks(tasks);
+      allTasksCache = tasks.map(normalizeTask);
+      applyTasks(allTasksCache);
       restoreAndRunQuery();
     }
 
@@ -616,15 +615,12 @@
     }
     function snapshotOne(li, completed) {
       const textEl = li.querySelector('.task-text');
-      let createdAt = li.dataset.createdAt;
-      let completedAt = li.dataset.completedAt || null;
-      if (!createdAt) createdAt = todayStr();
+      const date = (li.dataset.date || todayStr()).toString().slice(0, 10);
       return {
         id: li.dataset.id ? Number(li.dataset.id) : Date.now(),
         text: textEl ? textEl.textContent : '',
         completed,
-        createdAt,
-        completedAt: completedAt || null
+        date
       };
     }
 
@@ -632,9 +628,10 @@
       const today = todayStr();
       const year = String((new Date()).getFullYear());
       const tasks = allTasksCache;
-      const todayTasks = tasks.filter(t => (t.createdAt || '').slice(0, 10) === today);
-      const yearTasks = tasks.filter(t => (t.createdAt || '').startsWith(year));
-      const yearCompleted = tasks.filter(t => t.completed && (t.completedAt || '').startsWith(year));
+      const getDate = t => (t.date || t.createdAt || '').toString().slice(0, 10);
+      const todayTasks = tasks.filter(t => getDate(t) === today);
+      const yearTasks = tasks.filter(t => getDate(t).startsWith(year));
+      const yearCompleted = tasks.filter(t => t.completed && getDate(t).startsWith(year));
       const todayTotal = todayTasks.length;
       const yearCompletedCount = yearCompleted.length;
       const yearRate = yearTasks.length ? Math.round(yearCompletedCount / yearTasks.length * 100) : 0;
@@ -652,14 +649,11 @@
       taskList.innerHTML = '';
       if (doneList) doneList.innerHTML = '';
       tasks.forEach((t, i) => {
-        const id = t.id != null ? t.id : Date.now() + i;
-        const createdAt = t.createdAt || todayStr();
-        const completedAt = t.completed ? (t.completedAt || todayStr()) : null;
-        const completed = Boolean(t.completed);
-        const li = createTaskElement(t.text, completed, createdAt, completedAt, id);
-        if (completed && doneList && isCompletedToday(completedAt)) {
+        const nt = normalizeTask(t);
+        const id = nt.id != null ? nt.id : Date.now() + i;
+        const li = createTaskElement(nt.text, nt.completed, nt.date, id);
+        if (nt.completed && doneList && nt.date === todayStr()) {
           li.classList.add('completed');
-          li.dataset.completedAt = completedAt;
           const content = li.querySelector('.task-content');
           if (content) {
             const textEl = content.querySelector('.task-text');
@@ -699,7 +693,7 @@
       const end = endDate || '';
       const today = todayStr();
       const tasks = allTasksCache.filter(t => {
-        const d = t.createdAt || '';
+        const d = (t.date || t.createdAt || '').toString().slice(0, 10);
         if (d >= today) return false;
         if (!start && !end) return true;
         if (start && end) return d >= start && d <= end;
@@ -745,8 +739,9 @@
     }
 
     function createQueryTaskElement(t, isCompleted) {
-      const li = createTaskElement(t.text, isCompleted, t.createdAt, t.completedAt, t.id);
-      li.dataset.id = String(t.id);
+      const nt = normalizeTask(t);
+      const li = createTaskElement(nt.text, nt.completed, nt.date, nt.id);
+      li.dataset.id = String(nt.id);
       const actions = li.querySelector('.actions');
       if (!actions) return li;
       actions.innerHTML = '';
@@ -785,7 +780,7 @@
       const idx = allTasksCache.findIndex(t => String(t.id) === id);
       if (idx >= 0) {
         allTasksCache[idx].completed = true;
-        allTasksCache[idx].completedAt = todayStr();
+        allTasksCache[idx].completed = true;
       }
       if (API_BASE) saveTasksToServer().catch(() => {});
       else saveTasks();
@@ -800,15 +795,15 @@
         onBeforeSave: (el) => {
           const id = el.dataset.id;
           const newText = el.querySelector('.task-text')?.textContent || '';
-          const newDate = el.dataset.createdAt || todayStr();
+          const newDate = el.dataset.date || todayStr();
           const idx = allTasksCache.findIndex(t => String(t.id) === id);
           if (idx >= 0) {
             allTasksCache[idx].text = newText;
-            allTasksCache[idx].createdAt = newDate;
+            allTasksCache[idx].date = newDate;
           }
           const mainLi = taskList.querySelector(`li[data-id="${id}"]`) || document.getElementById('done-list')?.querySelector(`li[data-id="${id}"]`);
           if (mainLi) {
-            mainLi.dataset.createdAt = newDate;
+            mainLi.dataset.date = newDate;
             const t = mainLi.querySelector('.task-text');
             const d = mainLi.querySelector('.task-date');
             if (t) t.textContent = newText;
@@ -845,7 +840,7 @@
       const idx = allTasksCache.findIndex(t => String(t.id) === id);
       if (idx >= 0) {
         allTasksCache[idx].completed = false;
-        allTasksCache[idx].completedAt = null;
+        allTasksCache[idx].completed = false;
       }
       if (API_BASE) saveTasksToServer().catch(() => {});
       else saveTasks();
@@ -888,12 +883,12 @@
         const data = await res.json();
         const remote = data.value;
         if (!Array.isArray(remote)) return;
-        allTasksCache = remote;
+        allTasksCache = remote.map(normalizeTask);
         const local = getTasksSnapshot();
         const localStr = JSON.stringify(local);
         const remoteStr = JSON.stringify(remote);
         if (remoteStr !== localStr) {
-          applyTasks(remote);
+          applyTasks(allTasksCache);
           restoreAndRunQuery();
         }
       } catch (err) {
