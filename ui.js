@@ -321,8 +321,9 @@ if (doneListEl) {
 }
 
 // ── 左滑删除（移动端 Swipe-to-Delete）────────────────────────────────────────
-const SWIPE_MAX       = 80;  // 最大位移 px（与 .btn-delete width 一致）
-const SWIPE_THRESHOLD = 40;  // 超过此值松手后吸附展开，否则回弹
+const SWIPE_MAX       = 80;  // 跟手时最大位移 px（轻微超出，形成弹性手感）
+const SWIPE_SETTLED   = 66;  // 展开后的稳定停靠位 px（delete 按钮露出宽度）
+const SWIPE_THRESHOLD = 26;  // 阈值：超过则吸附到 SWIPE_SETTLED，不足则回弹到 0
 
 let _openedInner = null; // 当前已展开的 .task-inner
 let _swipeState  = null; // 当前正在滑动的状态
@@ -338,7 +339,7 @@ function closeCurrentSwipe(animate = true) {
 }
 
 function openSwipe(inner) {
-  inner.style.transform = `translateX(-${SWIPE_MAX}px)`;
+  inner.style.transform = `translateX(-${SWIPE_SETTLED}px)`;
   inner.closest('li.task')?.classList.add('swipe-open');
   _openedInner = inner;
 }
@@ -365,7 +366,7 @@ document.addEventListener('touchstart', function (e) {
     inner,
     startX:        touch.clientX,
     startY:        touch.clientY,
-    startTranslate: _openedInner === inner ? -SWIPE_MAX : 0,
+    startTranslate: _openedInner === inner ? -SWIPE_SETTLED : 0,
     direction:     null, // null = 未确定；'h' = 水平；'v' = 垂直
   };
 }, { passive: true });
