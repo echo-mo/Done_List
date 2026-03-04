@@ -202,6 +202,10 @@
       .import-row { flex-direction: column; align-items: stretch; }
       .import-row input[type="file"] { width: 100%; }
       .import-row #btn-import { width: 100%; }
+      .input-row input,
+      .edit-fields input[type="text"],
+      .edit-fields input[type="date"],
+      .query-row input[type="date"] { font-size: 16px; }
     }
     @media (max-width: 380px) {
       body { padding: 12px; }
@@ -1014,6 +1018,10 @@
       }
     });
 
+    function isEditing() {
+      return document.querySelector('.edit-fields') !== null;
+    }
+
     async function pollAndMergeTasks() {
       if (!API_BASE) return;
       try {
@@ -1023,13 +1031,15 @@
         const data = await res.json();
         const remote = data.value;
         if (!Array.isArray(remote)) return;
-        allTasksCache = deduplicateTasks(remote.map(normalizeTask));
-        const local = getTasksSnapshot();
-        const localStr = JSON.stringify(local);
-        const remoteStr = JSON.stringify(remote);
-        if (remoteStr !== localStr) {
-          applyTasks(allTasksCache);
-          restoreAndRunQuery();
+        const normalizedRemote = deduplicateTasks(remote.map(normalizeTask));
+        const cacheStr = JSON.stringify(allTasksCache);
+        const remoteStr = JSON.stringify(normalizedRemote);
+        if (remoteStr !== cacheStr) {
+          allTasksCache = normalizedRemote;
+          if (!isEditing()) {
+            applyTasks(allTasksCache);
+            restoreAndRunQuery();
+          }
         }
       } catch (err) {
         console.warn('Poll sync failed:', err);
