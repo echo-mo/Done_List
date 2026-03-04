@@ -4,6 +4,24 @@ const path = require('path');
 const cors = require('cors');
 const { MongoClient } = require('mongodb');
 
+// ── 业务状态码枚举 ───────────────────────────────────────────────────────────
+const BizCode = {
+  SUCCESS:              0,
+  KEY_REQUIRED:      1001,
+  KEY_NOT_FOUND:     1002,
+  STORAGE_WRITE_FAILED: 1003,
+  STORAGE_READ_FAILED:  1004,
+  INTERNAL_ERROR:    5000,
+};
+
+// 统一响应辅助
+function ok(res, data = null, message = 'success') {
+  return res.json({ code: BizCode.SUCCESS, message, data });
+}
+function fail(res, code, message, httpStatus = 200) {
+  return res.status(httpStatus).json({ code, message, data: null });
+}
+
 const app = express();
 const STORAGE_FILE = path.join(__dirname, 'storage.json');
 // Zeabur injects PORT; set MONGODB_URI in Zeabur env vars for persistent storage
@@ -99,14 +117,14 @@ async function writeStorage(data) {
 }
 
 app.get('/api/storage/status', async (req, res) => {
-  const db = await getDb();
+  const database = await getDb();
   const store = await readStorage();
   const taskCount = Array.isArray(store.todoList) ? store.todoList.length : 0;
   const hasUri = !!(process.env.MONGODB_URI || '').trim();
   const uriValid = /^mongodb(\+srv)?:\/\//i.test((process.env.MONGODB_URI || '').trim());
-  res.json({
-    storage: db ? 'MongoDB' : 'file',
-    mongodbConnected: !!db,
+  return ok(res, {
+    storage: database ? 'MongoDB' : 'file',
+    mongodbConnected: !!database,
     taskCount,
     hasData: taskCount > 0,
     debug: { hasUri, uriValid, mongoFailed }
@@ -117,35 +135,42 @@ app.get('/api/storage', async (req, res) => {
   const store = await readStorage();
   const key = req.query.key;
   if (key !== undefined && key !== '') {
-    if (!(key in store)) return res.status(404).json({ error: 'key not found' });
-    return res.json({ key, value: store[key] });
+    if (!(key in store)) return fail(res, BizCode.KEY_NOT_FOUND, 'key not found', 404);
+    return ok(res, { key, value: store[key] });
   }
-  res.json(store);
+  return ok(res, store);
 });
 
 app.post('/api/storage', async (req, res) => {
   const { key, value } = req.body;
-  if (key === undefined || key === '') return res.status(400).json({ error: 'key required' });
+  if (key === undefined || key === '') return fail(res, BizCode.KEY_REQUIRED, 'key required', 400);
   const store = await readStorage();
   store[key] = value;
-  if (!(await writeStorage(store))) return res.status(500).json({ error: 'failed to write' });
-  res.json({ success: true });
+  if (!(await writeStorage(store))) return fail(res, BizCode.STORAGE_WRITE_FAILED, 'storage write failed', 500);
+  return ok(res);
 });
 
 app.delete('/api/storage', async (req, res) => {
   const key = req.query.key;
   if (key === undefined || key === '') {
-    if (!(await writeStorage({}))) return res.status(500).json({ error: 'failed to write' });
-    return res.json({ success: true });
+    if (!(await writeStorage({}))) return fail(res, BizCode.STORAGE_WRITE_FAILED, 'storage write failed', 500);
+    return ok(res);
   }
   const store = await readStorage();
-  if (!(key in store)) return res.status(404).json({ error: 'key not found' });
+  if (!(key in store)) return fail(res, BizCode.KEY_NOT_FOUND, 'key not found', 404);
   delete store[key];
-  if (!(await writeStorage(store))) return res.status(500).json({ error: 'failed to write' });
-  res.json({ success: true });
+  if (!(await writeStorage(store))) return fail(res, BizCode.STORAGE_WRITE_FAILED, 'storage write failed', 500);
+  return ok(res);
 });
 
 app.get('/health', (req, res) => res.send('ok'));
+
+// 全局异常兜底中间件（必须放在所有路由之后，且保留 4 个参数）
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  return fail(res, BizCode.INTERNAL_ERROR, 'internal server error', 500);
+});
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on port ${PORT}`);
