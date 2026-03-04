@@ -290,6 +290,16 @@
     const taskList = document.querySelector('.task-list'); // 任务列表容器
 
     function todayStr() { return new Date().toISOString().slice(0, 10); }
+    function taskKey(t) { return ((t.date || '').toString().slice(0, 10) + '|' + (t.text || '').trim()); }
+    function deduplicateTasks(tasks) {
+      const seen = new Set();
+      return tasks.filter(t => {
+        const k = taskKey(t);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).map(normalizeTask);
+    }
     function normalizeTask(t) {
       const date = (t.date || t.createdAt || t.completedAt || todayStr()).toString().slice(0, 10);
       return { id: t.id, text: t.text || '', completed: Boolean(t.completed), date };
@@ -344,6 +354,10 @@
       const text = taskInput.value.trim();
       if (!text) return;
       const date = todayStr();
+      if (hasDuplicateByDateText(date, text)) {
+        alert('同一日期下已存在同名任务');
+        return;
+      }
       const id = Date.now();
       const taskItem = createTaskElement(text, false, date, id);
       taskList.appendChild(taskItem);
@@ -459,10 +473,15 @@
       saveBtn.onclick = async function() {
         const newText = inputText.value.trim();
         if (!newText) return;
-        li.dataset.date = inputDate.value || todayStr();
+        const newDate = inputDate.value || todayStr();
+        if (hasDuplicateByDateText(newDate, newText, li.dataset.id)) {
+          alert('同一日期下已存在同名任务');
+          return;
+        }
+        li.dataset.date = newDate;
         content.style.display = '';
         content.querySelector('.task-text').textContent = newText;
-        content.querySelector('.task-date').textContent = li.dataset.date;
+        content.querySelector('.task-date').textContent = newDate;
         li.removeChild(wrap);
         li.appendChild(actions);
         if (onBeforeSave) onBeforeSave(li);
@@ -551,7 +570,7 @@
         const tasks = JSON.parse(raw);
         if (!Array.isArray(tasks)) throw new Error('格式不正确');
 
-        allTasksCache = tasks.map(normalizeTask);
+        allTasksCache = deduplicateTasks(tasks.map(normalizeTask));
         applyTasks(allTasksCache);
         restoreAndRunQuery();
       } catch (err) {
@@ -602,7 +621,11 @@
         loadTasks();
         return;
       }
-      allTasksCache = tasks.map(normalizeTask);
+      const normalized = tasks.map(normalizeTask);
+      allTasksCache = deduplicateTasks(normalized);
+      if (allTasksCache.length !== normalized.length) {
+        saveTasksToServer().catch(() => {});
+      }
       applyTasks(allTasksCache);
       restoreAndRunQuery();
       try { localStorage.setItem('todoList', JSON.stringify(allTasksCache)); } catch (e) {}
@@ -634,6 +657,17 @@
         completed,
         date
       };
+    }
+
+    function hasDuplicateByDateText(date, text, excludeId) {
+      const today = todayStr();
+      const fromDom = getTasksSnapshot();
+      const fromCache = allTasksCache.filter(t => (t.date || '').toString().slice(0, 10) !== today);
+      const all = [...fromCache, ...fromDom];
+      const filtered = excludeId != null ? all.filter(t => String(t.id) !== String(excludeId)) : all;
+      const d = (date || '').toString().slice(0, 10);
+      const txt = (text || '').trim();
+      return filtered.some(t => (t.date || '').toString().slice(0, 10) === d && (t.text || '').trim() === txt);
     }
 
     function updateStats() {
@@ -965,6 +999,7 @@
           existingIds.add(nextId);
           nextId++;
         }
+        allTasksCache = deduplicateTasks(allTasksCache);
         if (API_BASE) await saveTasksToServer();
         else saveTasks();
         resultEl.className = 'import-result success';
@@ -988,7 +1023,7 @@
         const data = await res.json();
         const remote = data.value;
         if (!Array.isArray(remote)) return;
-        allTasksCache = remote.map(normalizeTask);
+        allTasksCache = deduplicateTasks(remote.map(normalizeTask));
         const local = getTasksSnapshot();
         const localStr = JSON.stringify(local);
         const remoteStr = JSON.stringify(remote);
