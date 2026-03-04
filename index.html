@@ -121,6 +121,7 @@
       gap: 15px;
       transition: transform 0.2s;
       border-left: 4px solid #ffa726;
+      position: relative;
     }
     .task:hover { transform: translateX(5px); }
     .task.completed {
@@ -156,6 +157,25 @@
     .task-date { font-size: 0.85em; color: #666; margin-top: 4px; }
     .task.completed .task-date { color: #888; }
     .task-content { flex: 1; min-width: 0; }
+    /* task-inner：桌面端作为 .task flex 行中的弹性子项 */
+    .task-inner {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+      min-width: 0;
+    }
+    /* 桌面端：delete 按钮从 .actions 剥离后保持正常外观 */
+    .task > .btn-delete {
+      padding: 6px 12px;
+      font-size: 0.9em;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s;
+      flex-shrink: 0;
+    }
 
     .section-title { color: #764ba2; font-size: 1.2em; margin-bottom: 15px; }
     .done-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
@@ -188,23 +208,52 @@
       .app-card { padding: 20px; }
       .title { font-size: 2em; }
       .stats-grid { grid-template-columns: 1fr; }
-      .input-row {
-        flex-direction: column;
-        flex-wrap: wrap;
-      }
+      .input-row { flex-direction: column; flex-wrap: wrap; }
       .input-row input { min-width: 0; width: 100%; }
       .btn-add { width: 100%; }
 
-      /* 任务卡片：保持横向布局，按钮在右侧垂直堆叠 */
-      .task { align-items: center; gap: 8px; }
-      .task-content { flex: 1; min-width: 0; }
-      .actions {
+      /* 任务卡片：左滑删除容器 */
+      .task { overflow: hidden; padding: 0; gap: 0; }
+
+      /* task-inner：可横向位移的顶层内容层 */
+      .task-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 12px 15px;
+        width: 100%;
+        box-sizing: border-box;
+        background: #f8f9ff;
+        position: relative;
+        z-index: 1;
+        transition: transform 0.3s ease;
+      }
+      .task.completed .task-inner { background: #f1f8f4; }
+      .done-list .task .task-inner  { background: #f1f8f4; }
+
+      /* 隐藏在右侧的删除按钮，左滑后露出 */
+      .task > .btn-delete {
+        position: absolute;
+        right: 0; top: 0;
+        width: 80px; height: 100%;
+        border-radius: 0;
+        font-size: 0.85em;
+        z-index: 0;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* 右侧按钮竖排 */
+      .task-inner .actions {
         flex-direction: column;
         gap: 4px;
         flex-shrink: 0;
         align-items: stretch;
       }
-      .actions button {
+      .task-inner .actions button {
         padding: 5px 10px;
         font-size: 0.78em;
         white-space: nowrap;
@@ -226,7 +275,7 @@
       .title { font-size: 1.1rem; }
       .app-card { padding: 16px; }
       .input-row input, .btn-add { padding: 10px; }
-      .task { padding: 10px; }
+      .task-inner { padding: 10px 12px; }
     }
   </style>
 </head>

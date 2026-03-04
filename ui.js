@@ -51,23 +51,31 @@ function createTaskElement(text, completed, date, id) {
   editBtn.className   = 'btn-edit';
   editBtn.textContent = 'Edit';
 
+  actions.appendChild(completeBtn);
+  actions.appendChild(editBtn);
+
+  // task-inner：可横向位移的顶层内容层（内含 content + actions，不含 delete）
+  const taskInner = document.createElement('div');
+  taskInner.className = 'task-inner';
+  taskInner.appendChild(content);
+  taskInner.appendChild(actions);
+
+  // delete 按钮作为 li 直属子元素，绝对定位于右侧（移动端左滑后露出）
   const deleteBtn       = document.createElement('button');
   deleteBtn.type        = 'button';
   deleteBtn.className   = 'btn-delete';
   deleteBtn.textContent = 'Delete';
 
-  actions.appendChild(completeBtn);
-  actions.appendChild(editBtn);
-  actions.appendChild(deleteBtn);
-  li.appendChild(content);
-  li.appendChild(actions);
+  li.appendChild(taskInner);
+  li.appendChild(deleteBtn);
   return li;
 }
 
 // 将 actions 替换为「已完成」按钮组（Undo / Edit / Delete）
 function setCompletedActions(actions) {
   actions.innerHTML = '';
-  [['btn-undo', 'Undo'], ['btn-edit', 'Edit'], ['btn-delete', 'Delete']].forEach(([cls, label]) => {
+  // delete 按钮已作为 li 直属子元素存在，此处只重建 undo / edit
+  [['btn-undo', 'Undo'], ['btn-edit', 'Edit']].forEach(([cls, label]) => {
     const btn       = document.createElement('button');
     btn.type        = 'button';
     btn.className   = cls;
@@ -151,15 +159,18 @@ taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); }
 
 // ── 编辑：进入 / 保存 / 取消 ────────────────────────────────────────────────
 function startEdit(li, opts) {
-  const textEl  = li.querySelector('.task-text');
-  const content = li.querySelector('.task-content');
-  const actions = li.querySelector('.actions');
+  const textEl   = li.querySelector('.task-text');
+  const content  = li.querySelector('.task-content');
+  const actions  = li.querySelector('.actions');
+  // task-inner 是编辑域的真实父节点；兼容无 task-inner 的旧结构
+  const taskInner = li.querySelector('.task-inner') || li;
   if (!content || !actions) return;
 
   const currentText  = textEl ? textEl.textContent : '';
   const currentDate  = li.dataset.date || Store.todayStr();
   const onBeforeSave = opts?.onBeforeSave;
 
+  closeCurrentSwipe(); // 进入编辑前收起左滑展开状态
   // ✅ 核心：进入编辑时设置 JS 状态标志，轮询保护不再依赖 DOM 查询
   Store.setEditing(li.dataset.id);
 
@@ -203,8 +214,8 @@ function startEdit(li, opts) {
     content.style.display = '';
     content.querySelector('.task-text').textContent = newText;
     content.querySelector('.task-date').textContent = newDate;
-    li.removeChild(wrap);
-    li.appendChild(actions);
+    taskInner.removeChild(wrap);
+    taskInner.appendChild(actions);
 
     Store.clearEditing(); // ✅ 保存完成后清除编辑标志
 
@@ -216,8 +227,8 @@ function startEdit(li, opts) {
 
   cancelBtn.onclick = function () {
     content.style.display = '';
-    li.removeChild(wrap);
-    li.appendChild(actions);
+    taskInner.removeChild(wrap);
+    taskInner.appendChild(actions);
     Store.clearEditing(); // ✅ 取消时同样清除编辑标志
   };
 
@@ -227,8 +238,8 @@ function startEdit(li, opts) {
   wrap.appendChild(inputDate);
   wrap.appendChild(btnWrap);
   content.style.display = 'none';
-  li.appendChild(wrap);
-  li.removeChild(actions);
+  taskInner.appendChild(wrap);
+  taskInner.removeChild(actions);
   inputText.focus();
 }
 
@@ -239,6 +250,7 @@ taskListEl.addEventListener('click', async function (e) {
   if (target.classList.contains('btn-delete')) {
     const li = target.closest('li.task');
     if (li) {
+      _openedInner = null; // 清除左滑状态
       Store.removeTask(li.dataset.id);
       taskListEl.removeChild(li);
     }
@@ -298,6 +310,7 @@ if (doneListEl) {
     }
 
     if (target.classList.contains('btn-delete')) {
+      _openedInner = null; // 清除左滑状态
       Store.removeTask(li.dataset.id);
       doneListEl.removeChild(li);
       if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
@@ -306,6 +319,102 @@ if (doneListEl) {
     }
   });
 }
+
+// ── 左滑删除（移动端 Swipe-to-Delete）────────────────────────────────────────
+const SWIPE_MAX       = 80;  // 最大位移 px（与 .btn-delete width 一致）
+const SWIPE_THRESHOLD = 40;  // 超过此值松手后吸附展开，否则回弹
+
+let _openedInner = null; // 当前已展开的 .task-inner
+let _swipeState  = null; // 当前正在滑动的状态
+
+function closeCurrentSwipe(animate = true) {
+  if (!_openedInner) return;
+  const inner = _openedInner;
+  _openedInner = null;
+  if (!animate) inner.style.transition = 'none';
+  inner.style.transform = 'translateX(0)';
+  inner.closest('li.task')?.classList.remove('swipe-open');
+  if (!animate) requestAnimationFrame(() => { inner.style.transition = ''; });
+}
+
+function openSwipe(inner) {
+  inner.style.transform = `translateX(-${SWIPE_MAX}px)`;
+  inner.closest('li.task')?.classList.add('swipe-open');
+  _openedInner = inner;
+}
+
+// 点击页面其他区域时收起展开的删除按钮
+document.addEventListener('click', function (e) {
+  if (!_openedInner) return;
+  const openedLi = _openedInner.closest('li.task');
+  // 点击发生在已展开任务内部（含 delete 按钮）则不收起，让 click 事件正常处理
+  if (openedLi && openedLi.contains(e.target)) return;
+  closeCurrentSwipe();
+});
+
+// 通过 document 事件代理统一处理所有 .task-inner 的滑动
+document.addEventListener('touchstart', function (e) {
+  if (Store.isEditing()) return;
+  const li = e.target.closest('li.task');
+  if (!li) return;
+  const inner = li.querySelector('.task-inner');
+  if (!inner) return;
+
+  const touch = e.touches[0];
+  _swipeState = {
+    inner,
+    startX:        touch.clientX,
+    startY:        touch.clientY,
+    startTranslate: _openedInner === inner ? -SWIPE_MAX : 0,
+    direction:     null, // null = 未确定；'h' = 水平；'v' = 垂直
+  };
+}, { passive: true });
+
+document.addEventListener('touchmove', function (e) {
+  if (!_swipeState) return;
+  const touch = e.touches[0];
+  const dx = touch.clientX - _swipeState.startX;
+  const dy = touch.clientY - _swipeState.startY;
+
+  // 首次移动时确定滑动方向
+  if (!_swipeState.direction) {
+    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return; // 尚未移动足够距离
+    _swipeState.direction = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+  }
+  // 垂直滑动：放弃水平位移，绝不阻止浏览器默认滚动
+  if (_swipeState.direction === 'v') return;
+
+  // 水平滑动：阻止页面滚动，跟随手指移动 task-inner
+  e.preventDefault();
+
+  // 收起其他已展开的任务
+  if (_openedInner && _openedInner !== _swipeState.inner) {
+    closeCurrentSwipe();
+  }
+
+  const newTranslate = Math.min(0, Math.max(-SWIPE_MAX, _swipeState.startTranslate + dx));
+  _swipeState.inner.style.transition = 'none';
+  _swipeState.inner.style.transform  = `translateX(${newTranslate}px)`;
+}, { passive: false });
+
+document.addEventListener('touchend', function (e) {
+  if (!_swipeState || _swipeState.direction !== 'h') {
+    _swipeState = null;
+    return;
+  }
+  const touch       = e.changedTouches[0];
+  const dx          = touch.clientX - _swipeState.startX;
+  const totalOffset = _swipeState.startTranslate + dx;
+
+  _swipeState.inner.style.transition = ''; // 恢复 CSS transition
+
+  if (totalOffset < -SWIPE_THRESHOLD) {
+    openSwipe(_swipeState.inner);
+  } else {
+    closeCurrentSwipe();
+  }
+  _swipeState = null;
+}, { passive: true });
 
 // ── 查询 ─────────────────────────────────────────────────────────────────────
 function runQuery(startDate, endDate) {
@@ -387,16 +496,13 @@ function createQueryTaskElement(t, isCompleted) {
   editBtn.type        = 'button';
   editBtn.className   = 'btn-edit';
   editBtn.textContent = 'Edit';
-
-  const deleteBtn       = document.createElement('button');
-  deleteBtn.type        = 'button';
-  deleteBtn.className   = 'btn-delete';
-  deleteBtn.textContent = 'Delete';
-
   actions.appendChild(editBtn);
-  actions.appendChild(deleteBtn);
-  editBtn.onclick   = () => startEditQueryTask(li);
-  deleteBtn.onclick = () => deleteQueryTask(li);
+  editBtn.onclick = () => startEditQueryTask(li);
+
+  // delete 按钮由 createTaskElement 创建为 li 直属子元素，直接绑定 onclick 即可
+  const deleteBtn = li.querySelector('.btn-delete');
+  if (deleteBtn) deleteBtn.onclick = () => deleteQueryTask(li);
+
   return li;
 }
 
