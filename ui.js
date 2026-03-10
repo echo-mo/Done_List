@@ -832,6 +832,9 @@ function createQueryTaskElement(t, isCompleted) {
   const editBtn = li.querySelector('.btn-edit');
   if (editBtn) editBtn.onclick = () => startEditQueryTask(li);
 
+  const editSwipeBtn = li.querySelector('.btn-edit-swipe');
+  if (editSwipeBtn) editSwipeBtn.onclick = () => { closeCurrentSwipe(); startEditQueryTask(li); };
+
   const deleteBtn = li.querySelector('.btn-delete');
   if (deleteBtn) deleteBtn.onclick = () => deleteQueryTask(li);
 
