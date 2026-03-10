@@ -52,19 +52,26 @@ function createTaskElement(text, completed, date, id) {
 
   actions.appendChild(editBtn);
 
-  // task-inner：可横向位移的顶层内容层（checkbox + content + actions，不含 delete）
+  // task-inner：可横向位移的顶层内容层（checkbox + content + actions，不含 delete/edit-swipe）
   const taskInner = document.createElement('div');
   taskInner.className = 'task-inner';
   taskInner.appendChild(checkboxEl);
   taskInner.appendChild(content);
   taskInner.appendChild(actions);
 
-  // delete 按钮作为 li 直属子元素，绝对定位于右侧（移动端左滑后露出）
+  // 左侧 Edit 滑出按钮（移动端右滑后露出，绝对定位于左侧）
+  const editSwipeBtn       = document.createElement('button');
+  editSwipeBtn.type        = 'button';
+  editSwipeBtn.className   = 'btn-edit-swipe';
+  editSwipeBtn.innerHTML   = '✏ Edit';
+
+  // 右侧 Delete 滑出按钮（移动端左滑后露出，绝对定位于右侧）
   const deleteBtn       = document.createElement('button');
   deleteBtn.type        = 'button';
   deleteBtn.className   = 'btn-delete';
-  deleteBtn.textContent = 'Delete';
+  deleteBtn.innerHTML   = '🗑 Delete';
 
+  li.appendChild(editSwipeBtn);
   li.appendChild(taskInner);
   li.appendChild(deleteBtn);
   return li;
@@ -163,9 +170,12 @@ function startEdit(li, opts) {
   const currentDate  = li.dataset.date || Store.todayStr();
   const onBeforeSave = opts?.onBeforeSave;
 
-  closeCurrentSwipe(); // 进入编辑前收起左滑展开状态
-  // ✅ 核心：进入编辑时设置 JS 状态标志，轮询保护不再依赖 DOM 查询
+  closeCurrentSwipe(); // 进入编辑前收起滑动展开状态
   Store.setEditing(li.dataset.id);
+
+  // 编辑模式下隐藏复选框（避免布局错乱）
+  const checkboxInner = li.querySelector('.task-checkbox');
+  if (checkboxInner) checkboxInner.style.display = 'none';
 
   const wrap = document.createElement('div');
   wrap.className = 'edit-fields';
@@ -202,15 +212,16 @@ function startEdit(li, opts) {
       return;
     }
 
-    Store.updateTask(li.dataset.id, { text: newText, date: newDate }); // ① 先写 Store
-    li.dataset.date = newDate;                                          // ② 再改 DOM
+    Store.updateTask(li.dataset.id, { text: newText, date: newDate });
+    li.dataset.date = newDate;
     content.style.display = '';
     content.querySelector('.task-text').textContent = newText;
     content.querySelector('.task-date').textContent = newDate;
     taskInner.removeChild(wrap);
     taskInner.appendChild(actions);
+    if (checkboxInner) checkboxInner.style.display = '';
 
-    Store.clearEditing(); // ✅ 保存完成后清除编辑标志
+    Store.clearEditing();
 
     if (onBeforeSave) onBeforeSave(li);
     if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
@@ -222,7 +233,8 @@ function startEdit(li, opts) {
     content.style.display = '';
     taskInner.removeChild(wrap);
     taskInner.appendChild(actions);
-    Store.clearEditing(); // ✅ 取消时同样清除编辑标志
+    if (checkboxInner) checkboxInner.style.display = '';
+    Store.clearEditing();
   };
 
   btnWrap.appendChild(saveBtn);
@@ -243,7 +255,8 @@ taskListEl.addEventListener('click', async function (e) {
   if (target.classList.contains('btn-delete')) {
     const li = target.closest('li.task');
     if (li) {
-      _openedInner = null; // 清除左滑状态
+      _openedInner = null;
+      _openedDirection = null;
       Store.removeTask(li.dataset.id);
       taskListEl.removeChild(li);
     }
@@ -270,9 +283,9 @@ taskListEl.addEventListener('click', async function (e) {
     return;
   }
 
-  if (target.classList.contains('btn-edit')) {
+  if (target.classList.contains('btn-edit') || target.classList.contains('btn-edit-swipe')) {
     const li = target.closest('li.task');
-    if (li) startEdit(li);
+    if (li) { closeCurrentSwipe(); startEdit(li); }
   }
 });
 
@@ -298,13 +311,14 @@ if (doneListEl) {
       return;
     }
 
-    if (target.classList.contains('btn-edit')) {
+    if (target.classList.contains('btn-edit') || target.classList.contains('btn-edit-swipe')) {
+      closeCurrentSwipe();
       startEdit(li);
       return;
     }
 
     if (target.classList.contains('btn-delete')) {
-      _openedInner = null; // 清除左滑状态
+      _openedInner = null;
       Store.removeTask(li.dataset.id);
       doneListEl.removeChild(li);
       if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
@@ -319,23 +333,29 @@ const SWIPE_MAX       = 80;  // 跟手时最大位移 px（轻微超出，形成
 const SWIPE_SETTLED   = 66;  // 展开后的稳定停靠位 px（delete 按钮露出宽度）
 const SWIPE_THRESHOLD = 26;  // 阈值：超过则吸附到 SWIPE_SETTLED，不足则回弹到 0
 
-let _openedInner = null; // 当前已展开的 .task-inner
-let _swipeState  = null; // 当前正在滑动的状态
+let _openedInner     = null; // 当前已展开的 .task-inner
+let _openedDirection = null; // 'left'(delete) | 'right'(edit)
+let _swipeState      = null; // 当前正在滑动的状态
 
 function closeCurrentSwipe(animate = true) {
   if (!_openedInner) return;
   const inner = _openedInner;
   _openedInner = null;
+  _openedDirection = null;
   if (!animate) inner.style.transition = 'none';
   inner.style.transform = 'translateX(0)';
-  inner.closest('li.task')?.classList.remove('swipe-open');
+  inner.closest('li.task')?.classList.remove('swipe-open', 'swipe-right-open');
   if (!animate) requestAnimationFrame(() => { inner.style.transition = ''; });
 }
 
-function openSwipe(inner) {
-  inner.style.transform = `translateX(-${SWIPE_SETTLED}px)`;
-  inner.closest('li.task')?.classList.add('swipe-open');
+function openSwipe(inner, direction) {
+  const offset = direction === 'right' ? SWIPE_SETTLED : -SWIPE_SETTLED;
+  inner.style.transform = `translateX(${offset}px)`;
+  const li = inner.closest('li.task');
+  li?.classList.remove('swipe-open', 'swipe-right-open');
+  li?.classList.add(direction === 'right' ? 'swipe-right-open' : 'swipe-open');
   _openedInner = inner;
+  _openedDirection = direction;
 }
 
 // 点击页面其他区域时收起展开的删除按钮
@@ -355,25 +375,30 @@ function cancelLongPress() {
   if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
 }
 
-// 通过 document 事件代理统一处理所有 .task-inner 的滑动
+// 通过 document 事件代理统一处理所有 .task-inner 的双向滑动
 document.addEventListener('touchstart', function (e) {
-  if (Store.isEditing()) return;
   const li = e.target.closest('li.task');
   if (!li) return;
   const inner = li.querySelector('.task-inner');
   if (!inner) return;
 
   const touch = e.touches[0];
+  // 根据当前打开方向设置初始 translate
+  let startTranslate = 0;
+  if (_openedInner === inner) {
+    startTranslate = _openedDirection === 'right' ? SWIPE_SETTLED : -SWIPE_SETTLED;
+  }
   _swipeState = {
-    inner,
-    startX:        touch.clientX,
-    startY:        touch.clientY,
-    startTranslate: _openedInner === inner ? -SWIPE_SETTLED : 0,
-    direction:     null,
+    inner, li,
+    startX: touch.clientX,
+    startY: touch.clientY,
+    startTranslate,
+    direction: null,
+    editing: Store.isEditing(),
   };
 
-  // 长按计时：排除复选框区域，避免复选框点击被误触发编辑
-  if (!e.target.classList.contains('task-checkbox')) {
+  // 长按计时（非编辑态且非复选框区域）
+  if (!Store.isEditing() && !e.target.classList.contains('task-checkbox')) {
     _longPressTimer = setTimeout(() => {
       _longPressTimer = null;
       if (!Store.isEditing()) startEdit(li);
@@ -387,19 +412,21 @@ document.addEventListener('touchmove', function (e) {
   const dx = touch.clientX - _swipeState.startX;
   const dy = touch.clientY - _swipeState.startY;
 
-  // 首次移动时确定滑动方向
   if (!_swipeState.direction) {
     if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
     _swipeState.direction = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
-    // 有任何方向性移动则取消长按
     cancelLongPress();
   }
   if (_swipeState.direction === 'v') return;
 
+  // 编辑态：不跟手移动，只等 touchend 判断是否取消编辑
+  if (_swipeState.editing) return;
+
   e.preventDefault();
   if (_openedInner && _openedInner !== _swipeState.inner) closeCurrentSwipe();
 
-  const newTranslate = Math.min(0, Math.max(-SWIPE_MAX, _swipeState.startTranslate + dx));
+  // 允许双向滑动（正=右滑露出Edit，负=左滑露出Delete）
+  const newTranslate = Math.min(SWIPE_MAX, Math.max(-SWIPE_MAX, _swipeState.startTranslate + dx));
   _swipeState.inner.style.transition = 'none';
   _swipeState.inner.style.transform  = `translateX(${newTranslate}px)`;
 }, { passive: false });
@@ -414,10 +441,21 @@ document.addEventListener('touchend', function (e) {
   const dx          = touch.clientX - _swipeState.startX;
   const totalOffset = _swipeState.startTranslate + dx;
 
+  // 编辑模式下：左滑 → 触发取消编辑
+  if (_swipeState.editing) {
+    if (dx < -SWIPE_THRESHOLD) {
+      _swipeState.li.querySelector('.btn-cancel')?.click();
+    }
+    _swipeState = null;
+    return;
+  }
+
   _swipeState.inner.style.transition = '';
 
   if (totalOffset < -SWIPE_THRESHOLD) {
-    openSwipe(_swipeState.inner);
+    openSwipe(_swipeState.inner, 'left');   // 露出 Delete
+  } else if (totalOffset > SWIPE_THRESHOLD) {
+    openSwipe(_swipeState.inner, 'right');  // 露出 Edit
   } else {
     closeCurrentSwipe();
   }
