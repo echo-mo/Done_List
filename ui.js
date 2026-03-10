@@ -158,36 +158,105 @@ addButton.addEventListener('click', addTask);
 taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
 
 // ── 编辑：进入 / 保存 / 取消 ────────────────────────────────────────────────
-function startEdit(li, opts) {
+
+/** 移动端：底部弹窗编辑 */
+function startEditBottomSheet(li, opts) {
+  closeCurrentSwipe();
+  Store.setEditing(li.dataset.id);
+
+  const currentText  = li.querySelector('.task-text')?.textContent || '';
+  const currentDate  = li.dataset.date || Store.todayStr();
+  const onBeforeSave = opts?.onBeforeSave;
+  const onAfterSave  = opts?.onAfterSave;
+
+  const overlay   = document.getElementById('edit-drawer-overlay');
+  const drawer    = document.getElementById('edit-drawer');
+  const textInput = document.getElementById('edit-drawer-text');
+  const dateInput = document.getElementById('edit-drawer-date');
+  const saveBtn   = document.getElementById('edit-drawer-save');
+  const cancelBtn = document.getElementById('edit-drawer-cancel');
+  if (!drawer) { startEditInline(li, opts); return; }
+
+  textInput.value = currentText;
+  dateInput.value = currentDate;
+
+  function closeSheet() {
+    overlay.classList.remove('open');
+    drawer.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+    drawer.setAttribute('aria-hidden', 'true');
+    saveBtn.onclick   = null;
+    cancelBtn.onclick = null;
+    overlay.onclick   = null;
+    Store.clearEditing();
+  }
+
+  saveBtn.onclick = async function () {
+    const newText = textInput.value.trim();
+    if (!newText) return;
+    const newDate = dateInput.value || Store.todayStr();
+
+    if (Store.hasDuplicate(newDate, newText, li.dataset.id)) {
+      alert('同一日期下已存在同名任务');
+      return;
+    }
+
+    Store.updateTask(li.dataset.id, { text: newText, date: newDate });
+    li.dataset.date = newDate;
+    const textEl = li.querySelector('.task-text');
+    const dateEl = li.querySelector('.task-date');
+    if (textEl) textEl.textContent = newText;
+    if (dateEl) dateEl.textContent = newDate;
+
+    closeSheet();
+
+    if (onBeforeSave) onBeforeSave(li);
+    if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
+    else Store.saveToLocal();
+    updateStats();
+    if (onAfterSave) onAfterSave();
+  };
+
+  cancelBtn.onclick = closeSheet;
+  overlay.onclick   = closeSheet;
+
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  drawer.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => textInput.focus());
+}
+
+/** 桌面端：内联编辑 */
+function startEditInline(li, opts) {
   const textEl   = li.querySelector('.task-text');
   const content  = li.querySelector('.task-content');
   const actions  = li.querySelector('.actions');
-  // task-inner 是编辑域的真实父节点；兼容无 task-inner 的旧结构
   const taskInner = li.querySelector('.task-inner') || li;
   if (!content || !actions) return;
 
   const currentText  = textEl ? textEl.textContent : '';
   const currentDate  = li.dataset.date || Store.todayStr();
   const onBeforeSave = opts?.onBeforeSave;
+  const onAfterSave  = opts?.onAfterSave;
 
-  closeCurrentSwipe(); // 进入编辑前收起滑动展开状态
+  closeCurrentSwipe();
   Store.setEditing(li.dataset.id);
 
-  // 编辑模式下隐藏复选框（避免布局错乱）
   const checkboxInner = li.querySelector('.task-checkbox');
   if (checkboxInner) checkboxInner.style.display = 'none';
 
   const wrap = document.createElement('div');
   wrap.className = 'edit-fields';
 
-  const inputText         = document.createElement('input');
-  inputText.type          = 'text';
-  inputText.value         = currentText;
-  inputText.placeholder   = 'Task content';
+  const inputText       = document.createElement('input');
+  inputText.type        = 'text';
+  inputText.value       = currentText;
+  inputText.placeholder = 'Task content';
 
-  const inputDate   = document.createElement('input');
-  inputDate.type    = 'date';
-  inputDate.value   = currentDate;
+  const inputDate  = document.createElement('input');
+  inputDate.type   = 'date';
+  inputDate.value  = currentDate;
 
   const btnWrap     = document.createElement('div');
   btnWrap.className = 'actions';
@@ -227,6 +296,7 @@ function startEdit(li, opts) {
     if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
     else Store.saveToLocal();
     updateStats();
+    if (onAfterSave) onAfterSave();
   };
 
   cancelBtn.onclick = function () {
@@ -246,6 +316,16 @@ function startEdit(li, opts) {
   taskInner.appendChild(wrap);
   taskInner.removeChild(actions);
   inputText.focus();
+}
+
+/** 统一入口：移动端用 Bottom Sheet，桌面端内联 */
+function startEdit(li, opts) {
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  if (isMobile && document.getElementById('edit-drawer')) {
+    startEditBottomSheet(li, opts);
+  } else {
+    startEditInline(li, opts);
+  }
 }
 
 // ── 事件代理：主任务列表（删除 / 完成 / 编辑）──────────────────────────────
@@ -772,13 +852,18 @@ function completeQueryTask(li) {
 }
 
 function startEditQueryTask(li) {
+  function afterSave() {
+    const state = getQueryState();
+    if (state) runQuery(state.start, state.end);
+    if (_drawerDate) refreshDrawerBody(_drawerDate);
+  }
+
   startEdit(li, {
     onBeforeSave: (el) => {
       const id      = el.dataset.id;
       const newText = el.querySelector('.task-text')?.textContent || '';
       const newDate = el.dataset.date || Store.todayStr();
-      // Store.updateTask 已在 startEdit 的 saveBtn.onclick 中调用，此处同步主列表 DOM
-      const mainLi = taskListEl.querySelector(`li[data-id="${id}"]`)
+      const mainLi  = taskListEl.querySelector(`li[data-id="${id}"]`)
         || doneListEl?.querySelector(`li[data-id="${id}"]`);
       if (mainLi) {
         mainLi.dataset.date = newDate;
@@ -788,15 +873,16 @@ function startEditQueryTask(li) {
         if (d) d.textContent = newDate;
       }
     },
+    onAfterSave: afterSave,
   });
+
+  // 桌面端内联编辑：saveBtn 在 li 内，通过包装保证查询刷新
   const saveBtn = li.querySelector('.btn-save');
   if (saveBtn) {
     const origOnclick = saveBtn.onclick;
     saveBtn.onclick = async function () {
       if (origOnclick) await origOnclick.call(this);
-      const state = getQueryState();
-      if (state) runQuery(state.start, state.end);
-      if (_drawerDate) refreshDrawerBody(_drawerDate);
+      afterSave();
     };
   }
 }

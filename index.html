@@ -237,6 +237,14 @@
     .drawer-title { padding: 0 20px 12px; font-size: 1.1em; color: #764ba2; font-weight: 600; }
     .drawer-body { overflow: auto; padding: 0 20px 24px; flex: 1; min-height: 0; }
 
+    /* 编辑任务底部弹窗 */
+    .edit-drawer-body { display: flex; flex-direction: column; gap: 14px; }
+    .edit-drawer-input { padding: 12px 14px; border: 2px solid hsl(255,50%,85%); border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; color: #333; outline: none; transition: border-color 0.2s; }
+    .edit-drawer-input:focus { border-color: hsl(255,74%,52%); }
+    .edit-drawer-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+    .edit-drawer-actions .btn-ed-cancel { background: #f0f0f0; color: #555; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; font-size: 15px; }
+    .edit-drawer-actions .btn-ed-save { background: hsl(255,74%,52%); color: white; border: none; border-radius: 8px; padding: 10px 24px; cursor: pointer; font-size: 15px; font-weight: 600; }
+
     .import-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
     .import-row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
     .import-row input[type="file"] { flex: 1; min-width: 150px; padding: 8px; }
@@ -410,6 +418,21 @@
           <div class="drawer-handle"></div>
           <div class="drawer-title" id="drawer-title">当日任务</div>
           <div class="drawer-body" id="drawer-tasks"></div>
+        </div>
+      </div>
+
+      <!-- 编辑任务底部弹窗（移动端） -->
+      <div class="drawer-overlay" id="edit-drawer-overlay" aria-hidden="true"></div>
+      <div class="drawer drawer-bottom" id="edit-drawer" aria-hidden="true">
+        <div class="drawer-handle"></div>
+        <div class="drawer-title">编辑任务</div>
+        <div class="drawer-body edit-drawer-body">
+          <input type="text" id="edit-drawer-text" class="edit-drawer-input" placeholder="任务内容">
+          <input type="date" id="edit-drawer-date" class="edit-drawer-input">
+          <div class="edit-drawer-actions">
+            <button type="button" id="edit-drawer-cancel" class="btn-ed-cancel">取消</button>
+            <button type="button" id="edit-drawer-save" class="btn-ed-save">确定</button>
+          </div>
         </div>
       </div>
 
