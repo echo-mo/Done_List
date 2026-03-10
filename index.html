@@ -111,7 +111,7 @@
       margin: 0;
     }
     .task {
-      background: #f8f9ff;
+      background: #f3e5f5;
       padding: 15px;
       border-radius: 10px;
       margin-bottom: 10px;
@@ -120,19 +120,14 @@
       align-items: center;
       gap: 15px;
       transition: transform 0.2s;
-      border-left: 4px solid #ffa726;
       position: relative;
     }
     .task:hover { transform: translateX(5px); }
     .task.completed {
-      border-left: 4px solid #66bb6a;
-      background: #f1f8f4;
+      background: #eeeeee;
     }
     .task-text { font-size: 1em; line-height: 1.5; }
-    .task.completed .task-text {
-      text-decoration: line-through;
-      color: #888;
-    }
+    .task.completed .task-text { color: #666; }
 
     .actions { display: flex; gap: 10px; flex-wrap: wrap; }
     .actions button {
@@ -180,8 +175,8 @@
     .section-title { color: #764ba2; font-size: 1.2em; margin-bottom: 15px; }
     .done-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
     .done-list { list-style: none; padding: 0; margin: 0; }
-    .done-list .task { border-left-color: #66bb6a; background: #f1f8f4; }
-    .done-list .task-text { text-decoration: line-through; color: #888; }
+    .done-list .task { background: #eeeeee; }
+    .done-list .task-text { color: #666; }
     .edit-fields { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
     .edit-fields input[type="text"], .edit-fields input[type="date"] { padding: 10px; border: 2px solid #667eea; border-radius: 10px; font-size: 1em; }
 
@@ -195,13 +190,18 @@
     .heatmap-cell { width: 14px; height: 14px; border-radius: 3px; background: #ebedf0; cursor: pointer; transition: transform 0.15s; }
     .heatmap-cell:hover { transform: scale(1.15); }
     .heatmap-cell[data-level="0"] { background: #ebedf0; }
-    .heatmap-cell[data-level="1"] { background: #9be9a8; }
-    .heatmap-cell[data-level="2"] { background: #40c463; }
-    .heatmap-cell[data-level="3"] { background: #30a14e; }
-    .heatmap-cell[data-level="4"] { background: #216e39; }
+    .heatmap-cell[data-level="1"] { background: #e1bee7; }
+    .heatmap-cell[data-level="2"] { background: #ce93d8; }
+    .heatmap-cell[data-level="3"] { background: #ba68c8; }
+    .heatmap-cell[data-level="4"] { background: #9c27b0; }
     .query-results-wrap { flex: 1; min-width: 200px; }
     .query-results { min-height: 20px; }
-    .query-results .task { margin-bottom: 10px; }
+    .query-results .task { margin-bottom: 10px; background: #f3e5f5; }
+    .query-results .task.completed { background: #eeeeee; }
+    .query-results .task.completed .task-text { color: #666; }
+    .drawer-body .task { background: #f3e5f5; margin-bottom: 10px; }
+    .drawer-body .task.completed { background: #eeeeee; }
+    .drawer-body .task.completed .task-text { color: #666; }
     .query-results .query-empty { color: #888; font-style: italic; padding: 15px 0; }
     .query-results .query-group { margin-bottom: 20px; }
     .query-results .query-group-title { font-size: 1em; color: #764ba2; margin-bottom: 10px; }
@@ -212,7 +212,6 @@
     .drawer-handle { width: 36px; height: 4px; background: #ccc; border-radius: 2px; margin: 10px auto 8px; }
     .drawer-title { padding: 0 20px 12px; font-size: 1.1em; color: #764ba2; font-weight: 600; }
     .drawer-body { overflow: auto; padding: 0 20px 24px; flex: 1; min-height: 0; }
-    .drawer-body .task { margin-bottom: 10px; }
 
     .import-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
     .import-row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
@@ -243,13 +242,13 @@
         padding: 12px 15px;
         width: 100%;
         box-sizing: border-box;
-        background: #f8f9ff;
+        background: #f3e5f5;
         position: relative;
         z-index: 1;
         transition: transform 0.3s ease;
       }
-      .task.completed .task-inner { background: #f1f8f4; }
-      .done-list .task .task-inner  { background: #f1f8f4; }
+      .task.completed .task-inner { background: #eeeeee; }
+      .done-list .task .task-inner  { background: #eeeeee; }
 
       /* 隐藏在右侧的删除按钮，左滑后露出 */
       .task > .btn-delete {

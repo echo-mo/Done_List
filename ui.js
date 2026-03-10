@@ -98,8 +98,6 @@ function applyTasks(tasks) {
 
     if (nt.completed && doneListEl && nt.date === today) {
       li.classList.add('completed');
-      const textEl = li.querySelector('.task-text');
-      if (textEl) textEl.style.textDecoration = 'line-through';
       const actions = li.querySelector('.actions');
       if (actions) setCompletedActions(actions);
       doneListEl.appendChild(li);
@@ -266,8 +264,6 @@ taskListEl.addEventListener('click', async function (e) {
     if (li && doneListEl && taskListEl.contains(li)) {
       Store.updateTask(li.dataset.id, { completed: true });
       li.classList.add('completed');
-      const textEl = li.querySelector('.task-text');
-      if (textEl) textEl.style.textDecoration = 'line-through';
       const actions = li.querySelector('.actions');
       if (actions) setCompletedActions(actions);
       taskListEl.removeChild(li);
@@ -418,68 +414,85 @@ document.addEventListener('touchend', function (e) {
   _swipeState = null;
 }, { passive: true });
 
-// ── 热力图（年度日历点阵）────────────────────────────────────────────────────
-const HEATMAP_LEVELS = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'];
-
-function getHeatmapYear() {
-  return new Date().getFullYear();
+// ── 热力图（按查询时间段的点阵）────────────────────────────────────────────
+// 紫色系，颜色深浅表示任务数量
+function getHeatmapRange() {
+  const startInput = document.getElementById('query-start');
+  const endInput = document.getElementById('query-end');
+  let start = startInput?.value?.trim() || '';
+  let end = endInput?.value?.trim() || '';
+  const today = Store.todayStr();
+  if (!start && !end) {
+    const d = new Date();
+    d.setDate(d.getDate() - 89);
+    start = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    end = today;
+  }
+  if (!start) start = end || today;
+  if (!end) end = start || today;
+  if (start > end) [start, end] = [end, start];
+  return { start, end };
 }
 
-function buildDayStatsForYear(year) {
-  const tasks = Store.getTasks();
-  const getDate = t => (t.date || '').toString().slice(0, 10);
-  const map = {};
-  const yearPrefix = String(year) + '-';
-  tasks.forEach(t => {
-    const d = getDate(t);
-    if (!d.startsWith(yearPrefix)) return;
-    if (!map[d]) map[d] = { total: 0, completed: 0 };
-    map[d].total++;
-    if (t.completed) map[d].completed++;
-  });
-  return map;
+function parseDateStr(s) {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
 }
 
-function isLeapYear(y) {
-  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
-}
-
-function getDaysInYear(year) {
-  return isLeapYear(year) ? 366 : 365;
-}
-
-function dateStrForDayOfYear(year, dayIndex) {
-  const d = new Date(year, 0, 1);
+function dateStrForRange(startStr, dayIndex) {
+  const d = parseDateStr(startStr);
   d.setDate(d.getDate() + dayIndex);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
-function completionLevel(total, completed) {
-  if (total === 0) return 0;
-  const rate = completed / total;
-  if (rate <= 0.25) return 1;
-  if (rate <= 0.5) return 2;
-  if (rate <= 0.75) return 3;
+function buildDayStatsForRange(startStr, endStr) {
+  const tasks = Store.getTasks();
+  const getDate = t => (t.date || '').toString().slice(0, 10);
+  const map = {};
+  const start = parseDateStr(startStr).getTime();
+  const end = parseDateStr(endStr).getTime();
+  tasks.forEach(t => {
+    const d = getDate(t);
+    if (!d) return;
+    const tms = parseDateStr(d).getTime();
+    if (tms < start || tms > end) return;
+    if (!map[d]) map[d] = 0;
+    map[d]++;
+  });
+  return map;
+}
+
+function countToLevel(count) {
+  if (!count || count <= 0) return 0;
+  if (count <= 1) return 1;
+  if (count <= 3) return 2;
+  if (count <= 5) return 3;
   return 4;
+}
+
+function getDaysBetween(startStr, endStr) {
+  const a = parseDateStr(startStr).getTime();
+  const b = parseDateStr(endStr).getTime();
+  return Math.round((b - a) / 86400000) + 1;
 }
 
 function renderHeatmap() {
   const container = document.getElementById('calendar-heatmap');
   if (!container) return;
-  const year = getHeatmapYear();
-  const dayStats = buildDayStatsForYear(year);
-  const daysInYear = getDaysInYear(year);
-  const firstDay = new Date(year, 0, 1).getDay();
+  const { start, end } = getHeatmapRange();
+  const dayStats = buildDayStatsForRange(start, end);
+  const totalDays = getDaysBetween(start, end);
+  const firstDayOfWeek = parseDateStr(start).getDay();
   container.innerHTML = '';
-  container.setAttribute('data-year', year);
+  container.setAttribute('data-range', start + '~' + end);
 
   const rows = [];
   let row = [];
-  for (let i = 0; i < firstDay; i++) row.push({ date: null, level: 0 });
-  for (let i = 0; i < daysInYear; i++) {
-    const dateStr = dateStrForDayOfYear(year, i);
-    const stat = dayStats[dateStr] || { total: 0, completed: 0 };
-    const level = completionLevel(stat.total, stat.completed);
+  for (let i = 0; i < firstDayOfWeek; i++) row.push({ date: null, level: 0 });
+  for (let i = 0; i < totalDays; i++) {
+    const dateStr = dateStrForRange(start, i);
+    const count = dayStats[dateStr] || 0;
+    const level = countToLevel(count);
     row.push({ date: dateStr, level });
     if (row.length === 7) {
       rows.push(row);
@@ -572,21 +585,32 @@ function closeDayDrawer() {
 
 // ── 查询 ─────────────────────────────────────────────────────────────────────
 function runQuery(startDate, endDate) {
-  const start = startDate || '';
-  const end   = endDate   || '';
+  let start = startDate || '';
+  let end   = endDate   || '';
   const today = Store.todayStr();
+  if (!start && !end) {
+    const d = new Date();
+    d.setDate(d.getDate() - 89);
+    start = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    end = today;
+    const startInput = document.getElementById('query-start');
+    const endInput = document.getElementById('query-end');
+    if (startInput) startInput.value = start;
+    if (endInput) endInput.value = end;
+  }
   const tasks = Store.getTasks().filter(t => {
     const d = (t.date || '').toString().slice(0, 10);
     if (d >= today) return false;
-    if (!start && !end) return true;
-    if (start && end)  return d >= start && d <= end;
-    if (start)         return d >= start;
-    return d <= end;
+    if (start && end) return d >= start && d <= end;
+    if (start) return d >= start;
+    if (end) return d <= end;
+    return true;
   });
   renderQueryResults(tasks);
   try {
     sessionStorage.setItem(QUERY_STORAGE_KEY, JSON.stringify({ start, end, tasks }));
   } catch (e) {}
+  renderHeatmap();
 }
 
 function renderQueryResults(tasks) {
