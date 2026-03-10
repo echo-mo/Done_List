@@ -109,6 +109,7 @@ function applyTasks(tasks) {
   });
 
   updateStats();
+  renderHeatmap();
 }
 
 // ── 渲染：统计面板 ───────────────────────────────────────────────────────────
@@ -417,6 +418,158 @@ document.addEventListener('touchend', function (e) {
   _swipeState = null;
 }, { passive: true });
 
+// ── 热力图（年度日历点阵）────────────────────────────────────────────────────
+const HEATMAP_LEVELS = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'];
+
+function getHeatmapYear() {
+  return new Date().getFullYear();
+}
+
+function buildDayStatsForYear(year) {
+  const tasks = Store.getTasks();
+  const getDate = t => (t.date || '').toString().slice(0, 10);
+  const map = {};
+  const yearPrefix = String(year) + '-';
+  tasks.forEach(t => {
+    const d = getDate(t);
+    if (!d.startsWith(yearPrefix)) return;
+    if (!map[d]) map[d] = { total: 0, completed: 0 };
+    map[d].total++;
+    if (t.completed) map[d].completed++;
+  });
+  return map;
+}
+
+function isLeapYear(y) {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+function getDaysInYear(year) {
+  return isLeapYear(year) ? 366 : 365;
+}
+
+function dateStrForDayOfYear(year, dayIndex) {
+  const d = new Date(year, 0, 1);
+  d.setDate(d.getDate() + dayIndex);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function completionLevel(total, completed) {
+  if (total === 0) return 0;
+  const rate = completed / total;
+  if (rate <= 0.25) return 1;
+  if (rate <= 0.5) return 2;
+  if (rate <= 0.75) return 3;
+  return 4;
+}
+
+function renderHeatmap() {
+  const container = document.getElementById('calendar-heatmap');
+  if (!container) return;
+  const year = getHeatmapYear();
+  const dayStats = buildDayStatsForYear(year);
+  const daysInYear = getDaysInYear(year);
+  const firstDay = new Date(year, 0, 1).getDay();
+  container.innerHTML = '';
+  container.setAttribute('data-year', year);
+
+  const rows = [];
+  let row = [];
+  for (let i = 0; i < firstDay; i++) row.push({ date: null, level: 0 });
+  for (let i = 0; i < daysInYear; i++) {
+    const dateStr = dateStrForDayOfYear(year, i);
+    const stat = dayStats[dateStr] || { total: 0, completed: 0 };
+    const level = completionLevel(stat.total, stat.completed);
+    row.push({ date: dateStr, level });
+    if (row.length === 7) {
+      rows.push(row);
+      row = [];
+    }
+  }
+  if (row.length) {
+    while (row.length < 7) row.push({ date: null, level: 0 });
+    rows.push(row);
+  }
+
+  rows.forEach(r => {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'heatmap-row';
+    r.forEach(cell => {
+      const cellEl = document.createElement('div');
+      cellEl.className = 'heatmap-cell';
+      cellEl.setAttribute('data-level', cell.level);
+      if (cell.date) {
+        cellEl.dataset.date = cell.date;
+        cellEl.setAttribute('title', cell.date);
+      }
+      rowEl.appendChild(cellEl);
+    });
+    container.appendChild(rowEl);
+  });
+
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+
+  container.querySelectorAll('.heatmap-cell[data-date]').forEach(el => {
+    el.addEventListener('click', function () {
+      const date = this.dataset.date;
+      if (!date) return;
+      if (isMobile) openDayDrawer(date); else selectDayInQuery(date);
+    });
+  });
+}
+
+function selectDayInQuery(dateStr) {
+  const startInput = document.getElementById('query-start');
+  const endInput = document.getElementById('query-end');
+  if (startInput) startInput.value = dateStr;
+  if (endInput) endInput.value = dateStr;
+  runQuery(dateStr, dateStr);
+}
+
+let _drawerDate = null;
+
+function openDayDrawer(dateStr) {
+  const overlay = document.getElementById('drawer-overlay');
+  const drawer = document.getElementById('day-drawer');
+  const titleEl = document.getElementById('drawer-title');
+  const bodyEl = document.getElementById('drawer-tasks');
+  if (!overlay || !drawer || !bodyEl) return;
+  _drawerDate = dateStr;
+  refreshDrawerBody(dateStr, titleEl, bodyEl);
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  drawer.setAttribute('aria-hidden', 'false');
+  overlay.setAttribute('aria-hidden', 'false');
+  overlay.onclick = closeDayDrawer;
+}
+
+function refreshDrawerBody(dateStr, titleEl, bodyEl) {
+  if (!bodyEl) bodyEl = document.getElementById('drawer-tasks');
+  if (!titleEl) titleEl = document.getElementById('drawer-title');
+  if (!bodyEl) return;
+  if (titleEl) titleEl.textContent = dateStr + ' 当日任务';
+  const tasks = Store.getTasks().filter(t => (t.date || '').toString().slice(0, 10) === dateStr);
+  bodyEl.innerHTML = '';
+  if (tasks.length === 0) {
+    bodyEl.innerHTML = '<p class="query-empty">该日暂无任务</p>';
+  } else {
+    tasks.forEach(t => {
+      const nt = Store.normalizeTask(t);
+      bodyEl.appendChild(createQueryTaskElement(nt, nt.completed));
+    });
+  }
+}
+
+function closeDayDrawer() {
+  _drawerDate = null;
+  const overlay = document.getElementById('drawer-overlay');
+  const drawer = document.getElementById('day-drawer');
+  if (overlay) overlay.classList.remove('open');
+  if (drawer) drawer.classList.remove('open');
+  if (drawer) drawer.setAttribute('aria-hidden', 'true');
+  if (overlay) overlay.setAttribute('aria-hidden', 'true');
+}
+
 // ── 查询 ─────────────────────────────────────────────────────────────────────
 function runQuery(startDate, endDate) {
   const start = startDate || '';
@@ -514,6 +667,7 @@ function completeQueryTask(li) {
   applyTasks(Store.getTasks());
   const state = getQueryState();
   if (state) runQuery(state.start, state.end);
+  if (_drawerDate) refreshDrawerBody(_drawerDate);
 }
 
 function startEditQueryTask(li) {
@@ -541,6 +695,7 @@ function startEditQueryTask(li) {
       if (origOnclick) await origOnclick.call(this);
       const state = getQueryState();
       if (state) runQuery(state.start, state.end);
+      if (_drawerDate) refreshDrawerBody(_drawerDate);
     };
   }
 }
@@ -557,6 +712,8 @@ function deleteQueryTask(li) {
   const state = getQueryState();
   if (state) runQuery(state.start, state.end);
   updateStats();
+  renderHeatmap();
+  if (_drawerDate) refreshDrawerBody(_drawerDate);
 }
 
 function undoQueryTask(li) {
@@ -566,6 +723,7 @@ function undoQueryTask(li) {
   applyTasks(Store.getTasks());
   const state = getQueryState();
   if (state) runQuery(state.start, state.end);
+  if (_drawerDate) refreshDrawerBody(_drawerDate);
 }
 
 function getQueryState() {

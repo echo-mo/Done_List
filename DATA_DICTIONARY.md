@@ -2,7 +2,7 @@
 
 > 项目：Willah's Done List  
 > 版本：v1.0  
-> 更新：2026-03-04
+> 更新：2026-03-10
 
 ---
 
@@ -54,6 +54,7 @@
 | `1002` | `KEY_NOT_FOUND` | 404 | 指定的 `key` 在存储中不存在 |
 | `1003` | `STORAGE_WRITE_FAILED` | 500 | 存储写入失败（MongoDB 与文件均失败） |
 | `1004` | `STORAGE_READ_FAILED` | 500 | 存储读取失败（保留，暂未启用） |
+| `2001` | `DUPLICATE_TASK` | 400 | 同日期下已存在同名任务（(date, text) 重复） |
 | `5000` | `INTERNAL_ERROR` | 500 | 未捕获的内部异常兜底 |
 
 ---
@@ -63,7 +64,7 @@
 | 方法 | 路径 | 成功 data | 常见错误码 |
 |---|---|---|---|
 | `GET` | `/api/storage?key=todoList` | `{ key, value: Task[] }` | 1002 |
-| `POST` | `/api/storage` | `null` | 1001, 1003 |
+| `POST` | `/api/storage` | `null` | 1001, 2001, 1003 |
 | `DELETE` | `/api/storage?key=xxx` | `null` | 1002, 1003 |
 | `GET` | `/api/storage/status` | `{ storage, mongodbConnected, taskCount, ... }` | — |
 | `GET` | `/health` | 纯文本 `ok`（供 Zeabur 健康检查） | — |

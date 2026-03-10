@@ -189,11 +189,30 @@
     .query-row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
     .query-row label { font-size: 0.9em; color: #666; }
     .query-row input[type="date"] { padding: 10px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 1em; }
+    .calendar-view-wrap { display: flex; gap: 24px; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; }
+    .heatmap-box { display: flex; flex-direction: column; gap: 4px; }
+    .heatmap-row { display: flex; gap: 4px; flex-wrap: nowrap; }
+    .heatmap-cell { width: 14px; height: 14px; border-radius: 3px; background: #ebedf0; cursor: pointer; transition: transform 0.15s; }
+    .heatmap-cell:hover { transform: scale(1.15); }
+    .heatmap-cell[data-level="0"] { background: #ebedf0; }
+    .heatmap-cell[data-level="1"] { background: #9be9a8; }
+    .heatmap-cell[data-level="2"] { background: #40c463; }
+    .heatmap-cell[data-level="3"] { background: #30a14e; }
+    .heatmap-cell[data-level="4"] { background: #216e39; }
+    .query-results-wrap { flex: 1; min-width: 200px; }
     .query-results { min-height: 20px; }
     .query-results .task { margin-bottom: 10px; }
     .query-results .query-empty { color: #888; font-style: italic; padding: 15px 0; }
     .query-results .query-group { margin-bottom: 20px; }
     .query-results .query-group-title { font-size: 1em; color: #764ba2; margin-bottom: 10px; }
+    .drawer-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; }
+    .drawer-overlay.open { display: block; }
+    .drawer { display: none; position: fixed; left: 0; right: 0; bottom: 0; max-height: 70vh; background: white; border-radius: 16px 16px 0 0; box-shadow: 0 -4px 20px rgba(0,0,0,0.15); z-index: 101; flex-direction: column; }
+    .drawer.open { display: flex; }
+    .drawer-handle { width: 36px; height: 4px; background: #ccc; border-radius: 2px; margin: 10px auto 8px; }
+    .drawer-title { padding: 0 20px 12px; font-size: 1.1em; color: #764ba2; font-weight: 600; }
+    .drawer-body { overflow: auto; padding: 0 20px 24px; flex: 1; min-height: 0; }
+    .drawer-body .task { margin-bottom: 10px; }
 
     .import-section { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }
     .import-row { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
@@ -262,6 +281,11 @@
       .query-row { flex-direction: column; align-items: stretch; }
       .query-row input[type="date"] { width: 100%; }
       .query-row #btn-query { width: 100%; }
+      .calendar-view-wrap { flex-direction: column; }
+      .query-results-wrap { display: none; }
+      .heatmap-cell { width: 10px; height: 10px; }
+      .drawer.open { animation: drawerSlide 0.25s ease; }
+      @keyframes drawerSlide { from { transform: translateY(100%); } to { transform: translateY(0); } }
       .import-row { flex-direction: column; align-items: stretch; }
       .import-row input[type="file"] { width: 100%; }
       .import-row #btn-import { width: 100%; }
@@ -330,7 +354,18 @@
           <input id="query-end" type="date">
           <button class="btn-add" id="btn-query">查询</button>
         </div>
-        <div id="query-results" class="query-results"></div>
+        <div class="calendar-view-wrap">
+          <div class="heatmap-box" id="calendar-heatmap" aria-label="年度任务热力图"></div>
+          <div class="query-results-wrap">
+            <div id="query-results" class="query-results"></div>
+          </div>
+        </div>
+        <div class="drawer-overlay" id="drawer-overlay" aria-hidden="true"></div>
+        <div class="drawer drawer-bottom" id="day-drawer" aria-hidden="true">
+          <div class="drawer-handle"></div>
+          <div class="drawer-title" id="drawer-title">当日任务</div>
+          <div class="drawer-body" id="drawer-tasks"></div>
+        </div>
       </div>
 
       <div class="import-section">

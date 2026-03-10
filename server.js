@@ -11,6 +11,7 @@ const BizCode = {
   KEY_NOT_FOUND:     1002,
   STORAGE_WRITE_FAILED: 1003,
   STORAGE_READ_FAILED:  1004,
+  DUPLICATE_TASK:    2001,
   INTERNAL_ERROR:    5000,
 };
 
@@ -141,9 +142,26 @@ app.get('/api/storage', async (req, res) => {
   return ok(res, store);
 });
 
+// 校验 todoList 内 (date + text) 同一天内不重复
+function hasDuplicateTasks(todoList) {
+  if (!Array.isArray(todoList)) return false;
+  const seen = new Set();
+  for (const t of todoList) {
+    const d = (t.date || '').toString().trim().slice(0, 10);
+    const txt = (t.text || '').toString().trim();
+    const k = d + '|' + txt;
+    if (seen.has(k)) return true;
+    seen.add(k);
+  }
+  return false;
+}
+
 app.post('/api/storage', async (req, res) => {
   const { key, value } = req.body;
   if (key === undefined || key === '') return fail(res, BizCode.KEY_REQUIRED, 'key required', 400);
+  if (key === 'todoList' && hasDuplicateTasks(value)) {
+    return fail(res, BizCode.DUPLICATE_TASK, '同日期下已存在同名任务', 400);
+  }
   const store = await readStorage();
   store[key] = value;
   if (!(await writeStorage(store))) return fail(res, BizCode.STORAGE_WRITE_FAILED, 'storage write failed', 500);

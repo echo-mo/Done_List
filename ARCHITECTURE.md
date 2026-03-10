@@ -27,8 +27,8 @@ graph TD
         Router[路由分发]
         BizCode["BizCode 枚举\nok() / fail() 辅助函数"]
         ReadWrite[readStorage / writeStorage]
+        Dedup["hasDuplicateTasks\nPOST todoList 写入前 (date+text) 校验"]
     end
-
     Router --> BizCode --> ReadWrite
     ReadWrite -->|优先| MongoDB[(MongoDB\n生产环境)]
     ReadWrite -->|降级| FileDB[(storage.json\n本地文件)]
@@ -74,7 +74,7 @@ sequenceDiagram
 | `index.html` | 纯静态骨架，提供 DOM 结构和 CSS 样式 | `<div>` 骨架 + `<script src>` × 3 | 无 JS |
 | `store.js` | 内存状态 + 纯数据操作，暴露 `Store` 全局对象 | `getTasks / setTasks / addTask / updateTask / removeTask / hasDuplicate / isEditing / setEditing / clearEditing` | 不得访问 DOM，不得调用 fetch |
 | `api.js` | 所有 HTTP I/O，暴露 `Api` 全局对象；UI 更新通过回调解耦 | `request / loadTasksFromServer / saveTasksToServer / pollAndMergeTasks / Api.init(callbacks)` | 可访问 `Store`，不得直接操作 DOM |
-| `ui.js` | DOM 渲染 + 全部事件绑定，初始化整个应用 | `applyTasks / updateStats / startEdit / addTask / runQuery` + 所有 `addEventListener` | 可访问 `Store` 和 `Api` |
+| `ui.js` | DOM 渲染 + 全部事件绑定，初始化整个应用 | `applyTasks / updateStats / startEdit / addTask / runQuery / renderHeatmap / openDayDrawer` + 热力图与 Bottom Drawer | 可访问 `Store` 和 `Api` |
 
 **单向依赖（无循环）**：
 
@@ -135,4 +135,7 @@ index.html
 { "code": 0, "message": "success", "data": null }
 ```
 
-BizCode 枚举见 [`DATA_DICTIONARY.md`](./DATA_DICTIONARY.md)。
+BizCode 枚举见 [`DATA_DICTIONARY.md`](./DATA_DICTIONARY.md)。  
+**POST `/api/storage`** 当 `key === 'todoList'` 时，服务端在写入前调用 `hasDuplicateTasks(value)` 校验 (date + text) 唯一性，若重复则返回 `code: 2001`（见 DATA_DICTIONARY）。
+
+**任务查询模块**：含年度热力图点阵（按完成率灰→深绿）、桌面端点阵与列表并排且点击某日切换列表、移动端仅点阵且点击某日底部 Drawer 展示该日任务；热力图按当前年展示，每年 1 月 1 日视图自然切换新年，历史数据不删。
