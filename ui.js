@@ -38,25 +38,24 @@ function createTaskElement(text, completed, date, id) {
   content.appendChild(span);
   content.appendChild(dateSpan);
 
+  // 复选框（左侧大圆圈，点击=完成/撤销）
+  const checkboxEl = document.createElement('div');
+  checkboxEl.className = 'task-checkbox' + (completed ? ' checked' : '');
+
   const actions = document.createElement('div');
   actions.className = 'actions';
-
-  const completeBtn       = document.createElement('button');
-  completeBtn.type        = 'button';
-  completeBtn.className   = 'btn-complete';
-  completeBtn.textContent = completed ? 'Undo' : 'Done';
 
   const editBtn       = document.createElement('button');
   editBtn.type        = 'button';
   editBtn.className   = 'btn-edit';
   editBtn.textContent = 'Edit';
 
-  actions.appendChild(completeBtn);
   actions.appendChild(editBtn);
 
-  // task-inner：可横向位移的顶层内容层（内含 content + actions，不含 delete）
+  // task-inner：可横向位移的顶层内容层（checkbox + content + actions，不含 delete）
   const taskInner = document.createElement('div');
   taskInner.className = 'task-inner';
+  taskInner.appendChild(checkboxEl);
   taskInner.appendChild(content);
   taskInner.appendChild(actions);
 
@@ -71,17 +70,14 @@ function createTaskElement(text, completed, date, id) {
   return li;
 }
 
-// 将 actions 替换为「已完成」按钮组（Undo / Edit / Delete）
+// 已完成任务的 actions 只保留 Edit（Undo 由复选框承担）
 function setCompletedActions(actions) {
   actions.innerHTML = '';
-  // delete 按钮已作为 li 直属子元素存在，此处只重建 undo / edit
-  [['btn-undo', 'Undo'], ['btn-edit', 'Edit']].forEach(([cls, label]) => {
-    const btn       = document.createElement('button');
-    btn.type        = 'button';
-    btn.className   = cls;
-    btn.textContent = label;
-    actions.appendChild(btn);
-  });
+  const editBtn       = document.createElement('button');
+  editBtn.type        = 'button';
+  editBtn.className   = 'btn-edit';
+  editBtn.textContent = 'Edit';
+  actions.appendChild(editBtn);
 }
 
 // ── 渲染：将全量任务列表写入 DOM ─────────────────────────────────────────────
@@ -98,8 +94,6 @@ function applyTasks(tasks) {
 
     if (nt.completed && doneListEl && nt.date === today) {
       li.classList.add('completed');
-      const actions = li.querySelector('.actions');
-      if (actions) setCompletedActions(actions);
       doneListEl.appendChild(li);
     } else if (!nt.completed) {
       taskListEl.appendChild(li);
@@ -259,18 +253,19 @@ taskListEl.addEventListener('click', async function (e) {
     return;
   }
 
-  if (target.classList.contains('btn-complete')) {
+  // 复选框点击 → 完成任务
+  if (target.classList.contains('task-checkbox') && !target.classList.contains('checked')) {
     const li = target.closest('li.task');
     if (li && doneListEl && taskListEl.contains(li)) {
       Store.updateTask(li.dataset.id, { completed: true });
       li.classList.add('completed');
-      const actions = li.querySelector('.actions');
-      if (actions) setCompletedActions(actions);
+      target.classList.add('checked');
       taskListEl.removeChild(li);
       doneListEl.appendChild(li);
       if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
       else Store.saveToLocal();
       updateStats();
+      renderHeatmap();
     }
     return;
   }
@@ -288,7 +283,8 @@ if (doneListEl) {
     const li     = target.closest('li.task');
     if (!li) return;
 
-    if (target.classList.contains('btn-undo')) {
+    // 复选框点击 → 撤销完成（Undo）
+    if (target.classList.contains('task-checkbox') && target.classList.contains('checked')) {
       const id   = li.dataset.id;
       const text = li.querySelector('.task-text')?.textContent || '';
       const date = li.dataset.date || Store.todayStr();
@@ -298,6 +294,7 @@ if (doneListEl) {
       if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
       else Store.saveToLocal();
       updateStats();
+      renderHeatmap();
       return;
     }
 
@@ -350,6 +347,14 @@ document.addEventListener('click', function (e) {
   closeCurrentSwipe();
 });
 
+// ── 长按编辑（移动端）───────────────────────────────────────────────────────
+const LONG_PRESS_MS = 550;
+let _longPressTimer = null;
+
+function cancelLongPress() {
+  if (_longPressTimer) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+}
+
 // 通过 document 事件代理统一处理所有 .task-inner 的滑动
 document.addEventListener('touchstart', function (e) {
   if (Store.isEditing()) return;
@@ -364,8 +369,16 @@ document.addEventListener('touchstart', function (e) {
     startX:        touch.clientX,
     startY:        touch.clientY,
     startTranslate: _openedInner === inner ? -SWIPE_SETTLED : 0,
-    direction:     null, // null = 未确定；'h' = 水平；'v' = 垂直
+    direction:     null,
   };
+
+  // 长按计时：排除复选框区域，避免复选框点击被误触发编辑
+  if (!e.target.classList.contains('task-checkbox')) {
+    _longPressTimer = setTimeout(() => {
+      _longPressTimer = null;
+      if (!Store.isEditing()) startEdit(li);
+    }, LONG_PRESS_MS);
+  }
 }, { passive: true });
 
 document.addEventListener('touchmove', function (e) {
@@ -376,19 +389,15 @@ document.addEventListener('touchmove', function (e) {
 
   // 首次移动时确定滑动方向
   if (!_swipeState.direction) {
-    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return; // 尚未移动足够距离
+    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
     _swipeState.direction = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+    // 有任何方向性移动则取消长按
+    cancelLongPress();
   }
-  // 垂直滑动：放弃水平位移，绝不阻止浏览器默认滚动
   if (_swipeState.direction === 'v') return;
 
-  // 水平滑动：阻止页面滚动，跟随手指移动 task-inner
   e.preventDefault();
-
-  // 收起其他已展开的任务
-  if (_openedInner && _openedInner !== _swipeState.inner) {
-    closeCurrentSwipe();
-  }
+  if (_openedInner && _openedInner !== _swipeState.inner) closeCurrentSwipe();
 
   const newTranslate = Math.min(0, Math.max(-SWIPE_MAX, _swipeState.startTranslate + dx));
   _swipeState.inner.style.transition = 'none';
@@ -396,6 +405,7 @@ document.addEventListener('touchmove', function (e) {
 }, { passive: false });
 
 document.addEventListener('touchend', function (e) {
+  cancelLongPress();
   if (!_swipeState || _swipeState.direction !== 'h') {
     _swipeState = null;
     return;
@@ -404,7 +414,7 @@ document.addEventListener('touchend', function (e) {
   const dx          = touch.clientX - _swipeState.startX;
   const totalOffset = _swipeState.startTranslate + dx;
 
-  _swipeState.inner.style.transition = ''; // 恢复 CSS transition
+  _swipeState.inner.style.transition = '';
 
   if (totalOffset < -SWIPE_THRESHOLD) {
     openSwipe(_swipeState.inner);
@@ -437,6 +447,16 @@ function getHeatmapRange() {
 function parseDateStr(s) {
   const [y, m, d] = s.split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function formatDate(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// 将 JS 的星期（0=周日..6=周六）转换为以周一为 0 的索引
+function getWeekdayIndex(dateObj) {
+  const js = dateObj.getDay(); // 0=Sunday..6=Saturday
+  return (js + 6) % 7;         // 0=Monday..6=Sunday
 }
 
 function dateStrForRange(startStr, dayIndex) {
@@ -481,23 +501,51 @@ function renderHeatmap() {
   if (!container) return;
   const { start, end } = getHeatmapRange();
   const dayStats = buildDayStatsForRange(start, end);
-  const totalDays = getDaysBetween(start, end);
-  const firstDayOfWeek = parseDateStr(start).getDay();
+  const startDate = parseDateStr(start);
+  const endDate = parseDateStr(end);
+  const startMs = startDate.getTime();
+  const endMs = endDate.getTime();
+
+  // 以「周一」为一周起点，对齐网格：
+  // gridStart = 起始日期所在周的周一
+  // gridEnd   = 结束日期所在周的周日
+  const startIdx = getWeekdayIndex(startDate); // 0=Mon..6=Sun
+  const endIdx   = getWeekdayIndex(endDate);
+  const gridStart = new Date(startDate);
+  gridStart.setDate(gridStart.getDate() - startIdx);
+  const gridEnd = new Date(endDate);
+  gridEnd.setDate(gridEnd.getDate() + (6 - endIdx));
+
+  const totalDays = Math.round((gridEnd.getTime() - gridStart.getTime()) / 86400000) + 1;
+
   container.innerHTML = '';
   container.setAttribute('data-range', start + '~' + end);
 
   const rows = [];
   let row = [];
-  for (let i = 0; i < firstDayOfWeek; i++) row.push({ date: null, level: 0 });
+  let current = new Date(gridStart);
+
   for (let i = 0; i < totalDays; i++) {
-    const dateStr = dateStrForRange(start, i);
-    const count = dayStats[dateStr] || 0;
-    const level = countToLevel(count);
-    row.push({ date: dateStr, level });
+    const currentMs = current.getTime();
+    const inRange = currentMs >= startMs && currentMs <= endMs;
+
+    if (inRange) {
+      const dateStr = formatDate(current);
+      const count = dayStats[dateStr] || 0;
+      const level = countToLevel(count);
+      row.push({ date: dateStr, level });
+    } else {
+      // 不在查询区间内的日期只占位，不绑定 date，不可点击
+      row.push({ date: null, level: 0 });
+    }
+
     if (row.length === 7) {
       rows.push(row);
       row = [];
     }
+
+    // 下一天
+    current.setDate(current.getDate() + 1);
   }
   if (row.length) {
     while (row.length < 7) row.push({ date: null, level: 0 });
@@ -650,34 +698,22 @@ function createQueryTaskElement(t, isCompleted) {
   const nt = Store.normalizeTask(t);
   const li = createTaskElement(nt.text, nt.completed, nt.date, nt.id);
   li.dataset.id = String(nt.id);
-  const actions = li.querySelector('.actions');
-  if (!actions) return li;
-  actions.innerHTML = '';
 
-  if (isCompleted) {
-    const undoBtn       = document.createElement('button');
-    undoBtn.type        = 'button';
-    undoBtn.className   = 'btn-undo';
-    undoBtn.textContent = 'Undo';
-    actions.appendChild(undoBtn);
-    undoBtn.onclick = () => undoQueryTask(li);
-  } else {
-    const doneBtn       = document.createElement('button');
-    doneBtn.type        = 'button';
-    doneBtn.className   = 'btn-complete';
-    doneBtn.textContent = 'Done';
-    actions.appendChild(doneBtn);
-    doneBtn.onclick = () => completeQueryTask(li);
+  // 复选框处理完成/撤销（与主列表逻辑一致）
+  const checkbox = li.querySelector('.task-checkbox');
+  if (checkbox) {
+    checkbox.onclick = () => {
+      if (li.classList.contains('completed')) {
+        undoQueryTask(li);
+      } else {
+        completeQueryTask(li);
+      }
+    };
   }
 
-  const editBtn       = document.createElement('button');
-  editBtn.type        = 'button';
-  editBtn.className   = 'btn-edit';
-  editBtn.textContent = 'Edit';
-  actions.appendChild(editBtn);
-  editBtn.onclick = () => startEditQueryTask(li);
+  const editBtn = li.querySelector('.btn-edit');
+  if (editBtn) editBtn.onclick = () => startEditQueryTask(li);
 
-  // delete 按钮由 createTaskElement 创建为 li 直属子元素，直接绑定 onclick 即可
   const deleteBtn = li.querySelector('.btn-delete');
   if (deleteBtn) deleteBtn.onclick = () => deleteQueryTask(li);
 
@@ -686,6 +722,9 @@ function createQueryTaskElement(t, isCompleted) {
 
 function completeQueryTask(li) {
   Store.updateTask(li.dataset.id, { completed: true });
+  li.classList.add('completed');
+  const cb = li.querySelector('.task-checkbox');
+  if (cb) cb.classList.add('checked');
   if (Api.API_BASE) Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
   else Store.saveToLocal();
   applyTasks(Store.getTasks());
@@ -742,6 +781,9 @@ function deleteQueryTask(li) {
 
 function undoQueryTask(li) {
   Store.updateTask(li.dataset.id, { completed: false });
+  li.classList.remove('completed');
+  const cb = li.querySelector('.task-checkbox');
+  if (cb) cb.classList.remove('checked');
   if (Api.API_BASE) Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
   else Store.saveToLocal();
   applyTasks(Store.getTasks());
