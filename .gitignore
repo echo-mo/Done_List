@@ -12,3 +12,7 @@ Thumbs.db
 # 编译产物
 dist/
 build/
+
+# 本地数据与日志（勿提交）
+storage.json
+*.log

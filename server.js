@@ -29,7 +29,7 @@ const STORAGE_FILE = path.join(__dirname, 'storage.json');
 const PORT = process.env.PORT || 3000;
 const RAW_URI = (process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
 const MONGODB_URI = /^mongodb(\+srv)?:\/\//i.test(RAW_URI) ? RAW_URI : '';
-const DB_NAME = 'willah_db';
+const DB_NAME = 'done_list_app';
 const COLLECTION = 'storage';
 
 let db = null;

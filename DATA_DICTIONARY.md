@@ -1,6 +1,6 @@
 # 核心数据字典
 
-> 项目：Willah's Done List  
+> 项目：Done List  
 > 版本：v1.0  
 > 更新：2026-03-10
 
@@ -23,7 +23,7 @@
 
 ## 实体二：StorageDocument（MongoDB 存储文档）
 
-集合：`willah_db.storage`
+集合：`done_list_app.storage`（数据库名与 `server.js` 中 `DB_NAME` 一致）
 
 | 字段名 | 语义 ID | 数据类型 | 描述 |
 |---|---|---|---|
