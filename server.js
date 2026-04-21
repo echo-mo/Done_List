@@ -156,7 +156,7 @@ function hasDuplicateTasks(todoList) {
   for (const t of todoList) {
     const d = (t.date || '').toString().trim().slice(0, 10);
     const txt = (t.text || '').toString().trim();
-    const cat = (t.category || 'self').toString().trim();
+    const cat = (t.category || 'personal').toString().trim();
     const k = d + '|' + txt + '|' + cat;
     if (seen.has(k)) return true;
     seen.add(k);

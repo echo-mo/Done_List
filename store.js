@@ -7,13 +7,13 @@ const Store = (() => {
   // ── 私有状态 ────────────────────────────────────────────────────────────────
   let _tasks = [];
   let _editingTaskId = null;
-  let _currentCategory = (typeof CONFIG !== 'undefined' ? CONFIG.DEFAULT_CATEGORY : 'self');
+  let _currentCategory = (typeof CONFIG !== 'undefined' ? CONFIG.DEFAULT_CATEGORY : 'personal');
 
   const _getCategoryKeys = () =>
-    (typeof CONFIG !== 'undefined' ? CONFIG.getCategoryKeys() : ['bachelor', 'self', 'career']);
+    (typeof CONFIG !== 'undefined' ? CONFIG.getCategoryKeys() : ['work', 'personal', 'health']);
 
   const _isValidCategory = (cat) =>
-    (typeof CONFIG !== 'undefined' ? CONFIG.isValidCategory(cat) : ['bachelor', 'self', 'career'].includes(cat));
+    (typeof CONFIG !== 'undefined' ? CONFIG.isValidCategory(cat) : ['work', 'personal', 'health'].includes(cat));
 
   // ── 基础工具 ────────────────────────────────────────────────────────────────
   const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -27,7 +27,7 @@ const Store = (() => {
   });
 
   const taskKey = (t) =>
-    (t.date || '').toString().slice(0, 10) + '|' + (t.text || '').trim() + '|' + (t.category || 'self');
+    (t.date || '').toString().slice(0, 10) + '|' + (t.text || '').trim() + '|' + (t.category || _currentCategory);
 
   const deduplicateTasks = (tasks) => {
     const seen = new Set();
@@ -75,7 +75,7 @@ const Store = (() => {
     return pool.some(
       t => (t.date || '').toString().slice(0, 10) === d
         && (t.text || '').trim() === txt
-        && (t.category || 'self') === cat
+        && (t.category || _currentCategory) === cat
     );
   };
 
@@ -89,7 +89,7 @@ const Store = (() => {
     _getCategoryKeys().forEach(c => { result[c] = []; });
     _tasks.forEach(t => {
       if (t.completed && (t.date || '').toString().slice(0, 10) === date) {
-        const cat = (t.category || 'self');
+        const cat = (t.category || _currentCategory);
         if (result[cat]) result[cat].push(t);
       }
     });
