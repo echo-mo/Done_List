@@ -6,8 +6,9 @@
  *       通过 Api.init() 注入的回调函数通知 ui.js。
  */
 const Api = (() => {
-  const API_BASE = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
-  const SYNC_INTERVAL_MS = 3000;
+  const API_BASE = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE_URL) ? CONFIG.API_BASE_URL
+    : (typeof location !== 'undefined' && location.origin) ? location.origin : '';
+  const SYNC_INTERVAL_MS = (typeof CONFIG !== 'undefined' ? CONFIG.SYNC_INTERVAL_MS : 3000);
 
   // ui.js 通过 Api.init() 注入以下回调，解耦 api 与 dom
   let _cb = {
@@ -81,12 +82,24 @@ const Api = (() => {
     });
   }
 
-  // ── 轮询：多端实时同步 ──────────────────────────────────────────────────────
+  // ── 轮询：多端实时同步（ETag 304 优化）──────────────────────────────────────
+  let _pollETag = null;
+
   async function pollAndMergeTasks() {
     if (!API_BASE) return;
     try {
-      const data   = await request(`${API_BASE}/api/storage?key=todoList`);
-      const remote = data?.value;
+      const headers = {};
+      if (_pollETag) headers['If-None-Match'] = _pollETag;
+
+      const res = await fetch(`${API_BASE}/api/storage?key=todoList`, { headers });
+      if (res.status === 304) return;
+
+      const json = await res.json();
+      if (json.code !== 0) return;
+
+      _pollETag = res.headers.get('ETag');
+
+      const remote = json.data?.value;
       if (!Array.isArray(remote)) return;
 
       const normalizedRemote = Store.deduplicateTasks(remote.map(Store.normalizeTask));
@@ -95,8 +108,6 @@ const Api = (() => {
 
       if (remoteStr !== cacheStr) {
         Store.setTasks(normalizedRemote);
-        // 核心修复：编辑状态由 Store.isEditing()（JS 状态）决定，
-        // 不再依赖 document.querySelector('.edit-fields')（DOM 查询）。
         if (!Store.isEditing()) {
           _cb.applyTasks?.(normalizedRemote);
           _cb.restoreAndRunQuery?.();
@@ -107,6 +118,18 @@ const Api = (() => {
     }
   }
 
+  // ── 防抖保存：乐观更新，合并短时间内的多次写操作 ─────────────────────────
+  let _saveTimer = null;
+  function debouncedSave(delay = 500) {
+    Store.saveToLocal();
+    if (!API_BASE) return;
+    if (_saveTimer) clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => {
+      _saveTimer = null;
+      saveTasksToServer().catch(err => console.warn('Background save failed:', err));
+    }, delay);
+  }
+
   // ── 公开接口 ────────────────────────────────────────────────────────────────
   return {
     API_BASE,
@@ -115,6 +138,7 @@ const Api = (() => {
     request,
     loadTasksFromServer,
     saveTasksToServer,
+    debouncedSave,
     pollAndMergeTasks,
   };
 })();

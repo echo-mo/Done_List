@@ -5,8 +5,15 @@
  */
 const Store = (() => {
   // ── 私有状态 ────────────────────────────────────────────────────────────────
-  let _tasks = [];            // 全量任务缓存（TASK-001~004）
-  let _editingTaskId = null;  // null = 未编辑；有值 = 正在编辑该任务 id
+  let _tasks = [];
+  let _editingTaskId = null;
+  let _currentCategory = (typeof CONFIG !== 'undefined' ? CONFIG.DEFAULT_CATEGORY : 'self');
+
+  const _getCategoryKeys = () =>
+    (typeof CONFIG !== 'undefined' ? CONFIG.getCategoryKeys() : ['bachelor', 'self', 'career']);
+
+  const _isValidCategory = (cat) =>
+    (typeof CONFIG !== 'undefined' ? CONFIG.isValidCategory(cat) : ['bachelor', 'self', 'career'].includes(cat));
 
   // ── 基础工具 ────────────────────────────────────────────────────────────────
   const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -16,10 +23,11 @@ const Store = (() => {
     text: t.text || '',
     completed: Boolean(t.completed),
     date: (t.date || t.createdAt || t.completedAt || todayStr()).toString().slice(0, 10),
+    category: _isValidCategory(t.category) ? t.category : _currentCategory,
   });
 
   const taskKey = (t) =>
-    (t.date || '').toString().slice(0, 10) + '|' + (t.text || '').trim();
+    (t.date || '').toString().slice(0, 10) + '|' + (t.text || '').trim() + '|' + (t.category || 'self');
 
   const deduplicateTasks = (tasks) => {
     const seen = new Set();
@@ -57,16 +65,35 @@ const Store = (() => {
 
   // ── 去重校验 ────────────────────────────────────────────────────────────────
   // 注：重构后 _tasks 始终为权威数据源，无需再合并 DOM 快照。
-  const hasDuplicate = (date, text, excludeId) => {
+  const hasDuplicate = (date, text, category, excludeId) => {
     const d   = (date || '').toString().slice(0, 10);
     const txt = (text || '').trim();
+    const cat = category || _currentCategory;
     const pool = excludeId != null
       ? _tasks.filter(t => String(t.id) !== String(excludeId))
       : _tasks;
     return pool.some(
       t => (t.date || '').toString().slice(0, 10) === d
         && (t.text || '').trim() === txt
+        && (t.category || 'self') === cat
     );
+  };
+
+  // ── 分类状态 ─────────────────────────────────────────────────────────────────
+  const getCategory = () => _currentCategory;
+  const setCategory = (cat) => { if (_isValidCategory(cat)) _currentCategory = cat; };
+  const getTasksByCategory = (cat) => _tasks.filter(t => (t.category || _currentCategory) === cat);
+
+  const getCompletedTasksGrouped = (date) => {
+    const result = {};
+    _getCategoryKeys().forEach(c => { result[c] = []; });
+    _tasks.forEach(t => {
+      if (t.completed && (t.date || '').toString().slice(0, 10) === date) {
+        const cat = (t.category || 'self');
+        if (result[cat]) result[cat].push(t);
+      }
+    });
+    return result;
   };
 
   // ── localStorage ────────────────────────────────────────────────────────────
@@ -91,6 +118,8 @@ const Store = (() => {
 
   // ── 公开接口 ────────────────────────────────────────────────────────────────
   return {
+    getCategoryKeys: _getCategoryKeys,
+    isValidCategory: _isValidCategory,
     todayStr,
     normalizeTask,
     deduplicateTasks,
@@ -104,6 +133,10 @@ const Store = (() => {
     updateTask,
     removeTask,
     hasDuplicate,
+    getCategory,
+    setCategory,
+    getTasksByCategory,
+    getCompletedTasksGrouped,
     saveToLocal,
     loadFromLocal,
   };

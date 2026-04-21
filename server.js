@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const cors = require('cors');
 const { MongoClient } = require('mongodb');
 
@@ -29,7 +30,7 @@ const STORAGE_FILE = path.join(__dirname, 'storage.json');
 const PORT = process.env.PORT || 3000;
 const RAW_URI = (process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
 const MONGODB_URI = /^mongodb(\+srv)?:\/\//i.test(RAW_URI) ? RAW_URI : '';
-const DB_NAME = 'done_list_app';
+const DB_NAME = 'done_list_db';
 const COLLECTION = 'storage';
 
 let db = null;
@@ -135,21 +136,28 @@ app.get('/api/storage/status', async (req, res) => {
 app.get('/api/storage', async (req, res) => {
   const store = await readStorage();
   const key = req.query.key;
+  let data;
   if (key !== undefined && key !== '') {
     if (!(key in store)) return fail(res, BizCode.KEY_NOT_FOUND, 'key not found', 404);
-    return ok(res, { key, value: store[key] });
+    data = { key, value: store[key] };
+  } else {
+    data = store;
   }
-  return ok(res, store);
+  const etag = '"' + crypto.createHash('md5').update(JSON.stringify(data)).digest('hex').slice(0, 16) + '"';
+  res.setHeader('ETag', etag);
+  if (req.headers['if-none-match'] === etag) return res.status(304).end();
+  return ok(res, data);
 });
 
-// 校验 todoList 内 (date + text) 同一天内不重复
+// 校验 todoList 内 (date + text + category) 同一天同一分类内不重复
 function hasDuplicateTasks(todoList) {
   if (!Array.isArray(todoList)) return false;
   const seen = new Set();
   for (const t of todoList) {
     const d = (t.date || '').toString().trim().slice(0, 10);
     const txt = (t.text || '').toString().trim();
-    const k = d + '|' + txt;
+    const cat = (t.category || 'self').toString().trim();
+    const k = d + '|' + txt + '|' + cat;
     if (seen.has(k)) return true;
     seen.add(k);
   }

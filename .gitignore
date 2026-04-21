@@ -1,18 +1,22 @@
-# 依赖
+# Dependencies
 node_modules/
 
-# 环境配置
+# Environment
 .env
 .env.local
 
-# 系统文件
+# System files
 .DS_Store
 Thumbs.db
 
-# 编译产物
+# Build output
 dist/
 build/
 
-# 本地数据与日志（勿提交）
+# Runtime data
 storage.json
-*.log
+
+# IDE / editor
+.claude/
+.vscode/
+.idea/

@@ -7,14 +7,14 @@
 
 // ── DOM 引用 ─────────────────────────────────────────────────────────────────
 const taskInput  = document.getElementById('task-input');
-const addButton  = document.querySelector('.btn-add');
+const addButton  = document.getElementById('btn-add');
 const taskListEl = document.querySelector('.task-list');
 const doneListEl = document.getElementById('done-list');
 
 const QUERY_STORAGE_KEY = 'taskQueryState';
 
 // ── 渲染：单个任务 <li> 元素 ─────────────────────────────────────────────────
-function createTaskElement(text, completed, date, id) {
+function createTaskElement(text, completed, date, id, opts) {
   if (id == null) id = Date.now();
   if (!date) date = Store.todayStr();
 
@@ -36,6 +36,14 @@ function createTaskElement(text, completed, date, id) {
   dateSpan.textContent = date;
 
   content.appendChild(span);
+
+  if (opts?.showCategoryBadge && opts.category) {
+    const badge = document.createElement('span');
+    badge.className = 'task-category-badge';
+    badge.textContent = opts.category;
+    span.appendChild(badge);
+  }
+
   content.appendChild(dateSpan);
 
   // 复选框（左侧大圆圈，点击=完成/撤销）
@@ -87,35 +95,86 @@ function setCompletedActions(actions) {
   actions.appendChild(editBtn);
 }
 
-// ── 渲染：将全量任务列表写入 DOM ─────────────────────────────────────────────
+// ── 渲染：将全量任务列表写入 DOM（指纹跳过无变化重渲染）─────────────────────
+let _taskListFP = '';
+
 function applyTasks(tasks) {
   if (!Array.isArray(tasks)) return;
-  taskListEl.innerHTML = '';
-  if (doneListEl) doneListEl.innerHTML = '';
-  const today = Store.todayStr();
+  const currentCat = Store.getCategory();
 
+  const visible = [];
   tasks.forEach((t, i) => {
     const nt = Store.normalizeTask(t);
-    const id = nt.id != null ? nt.id : Date.now() + i;
-    const li = createTaskElement(nt.text, nt.completed, nt.date, id);
-
-    if (nt.completed && doneListEl && nt.date === today) {
-      li.classList.add('completed');
-      doneListEl.appendChild(li);
-    } else if (!nt.completed) {
-      taskListEl.appendChild(li);
-    }
+    if ((nt.category || 'self') !== currentCat) return;
+    if (nt.completed) return;
+    visible.push({ nt, id: nt.id != null ? nt.id : Date.now() + i });
   });
 
+  const fp = visible.map(v => v.id + '|' + v.nt.text + '|' + v.nt.date).join('\n');
+  if (fp !== _taskListFP) {
+    _taskListFP = fp;
+    taskListEl.innerHTML = '';
+    visible.forEach(v => {
+      taskListEl.appendChild(createTaskElement(v.nt.text, false, v.nt.date, v.id));
+    });
+  }
+
+  renderDoneList();
   updateStats();
   renderHeatmap();
+}
+
+let _doneListFP = '';
+
+function renderDoneList() {
+  if (!doneListEl) return;
+  const today = Store.todayStr();
+  const grouped = Store.getCompletedTasksGrouped(today);
+
+  const fp = Store.getCategoryKeys().map(cat =>
+    cat + ':' + (grouped[cat] || []).map(t => t.id + '|' + t.text).join(',')
+  ).join(';');
+  if (fp === _doneListFP) return;
+  _doneListFP = fp;
+
+  doneListEl.innerHTML = '';
+
+  Store.getCategoryKeys().forEach(cat => {
+    const tasks = grouped[cat] || [];
+    const group = document.createElement('div');
+    group.className = 'done-category-group';
+
+    const header = document.createElement('div');
+    header.className = 'done-category-header' + (tasks.length === 0 ? ' empty' : '');
+    const bar = document.createElement('span');
+    bar.className = 'done-category-bar';
+    bar.style.background = CONFIG.getCategoryColor(cat);
+    header.appendChild(bar);
+    header.appendChild(document.createTextNode(CONFIG.getCategoryLabel(cat) + (tasks.length > 0 ? ' (' + tasks.length + ')' : '')));
+    group.appendChild(header);
+
+    if (tasks.length > 0) {
+      const ul = document.createElement('ul');
+      ul.className = 'done-list';
+      tasks.forEach(t => {
+        const nt = Store.normalizeTask(t);
+        const li = createTaskElement(nt.text, true, nt.date, nt.id);
+        li.classList.add('completed', 'task-fade-in');
+        ul.appendChild(li);
+      });
+      group.appendChild(ul);
+    }
+
+    doneListEl.appendChild(group);
+  });
 }
 
 // ── 渲染：统计面板 ───────────────────────────────────────────────────────────
 function updateStats() {
   const today  = Store.todayStr();
   const year   = String(new Date().getFullYear());
-  const tasks  = Store.getTasks();
+  const currentCat = Store.getCategory();
+  const tasks  = Store.getTasksByCategory(currentCat);
   const getDate = t => (t.date || t.createdAt || '').toString().slice(0, 10);
 
   const yearTasks          = tasks.filter(t => getDate(t).startsWith(year));
@@ -136,21 +195,21 @@ async function addTask() {
   const text = taskInput.value.trim();
   if (!text) return;
   const date = Store.todayStr();
+  const category = Store.getCategory();
 
-  if (Store.hasDuplicate(date, text)) {
-    alert('同一日期下已存在同名任务');
+  if (Store.hasDuplicate(date, text, category)) {
+    alert(CONFIG.text.duplicateAlert);
     return;
   }
 
   const id = Date.now();
-  Store.addTask({ id, text, date, completed: false }); // ① 先写 Store（权威数据源）
+  Store.addTask({ id, text, date, completed: false, category }); // ① 先写 Store（权威数据源）
   const li = createTaskElement(text, false, date, id); // ② 再更新 DOM
   taskListEl.appendChild(li);
   taskInput.value = '';
   taskInput.focus();
 
-  if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-  else Store.saveToLocal();
+  Api.debouncedSave();
   updateStats();
 }
 
@@ -166,6 +225,8 @@ function startEditBottomSheet(li, opts) {
 
   const currentText  = li.querySelector('.task-text')?.textContent || '';
   const currentDate  = li.dataset.date || Store.todayStr();
+  const taskData     = Store.getTasks().find(t => String(t.id) === li.dataset.id) || {};
+  const currentCat   = taskData.category || Store.getCategory();
   const onBeforeSave = opts?.onBeforeSave;
   const onAfterSave  = opts?.onAfterSave;
 
@@ -173,12 +234,14 @@ function startEditBottomSheet(li, opts) {
   const drawer    = document.getElementById('edit-drawer');
   const textInput = document.getElementById('edit-drawer-text');
   const dateInput = document.getElementById('edit-drawer-date');
+  const catSelect = document.getElementById('edit-drawer-category');
   const saveBtn   = document.getElementById('edit-drawer-save');
   const cancelBtn = document.getElementById('edit-drawer-cancel');
   if (!drawer) { startEditInline(li, opts); return; }
 
   textInput.value = currentText;
   dateInput.value = currentDate;
+  if (catSelect) catSelect.value = currentCat;
 
   function closeSheet() {
     overlay.classList.remove('open');
@@ -195,25 +258,24 @@ function startEditBottomSheet(li, opts) {
     const newText = textInput.value.trim();
     if (!newText) return;
     const newDate = dateInput.value || Store.todayStr();
+    const newCat  = catSelect ? catSelect.value : currentCat;
 
-    if (Store.hasDuplicate(newDate, newText, li.dataset.id)) {
-      alert('同一日期下已存在同名任务');
+    if (newText === currentText && newDate === currentDate && newCat === currentCat) {
+      closeSheet();
       return;
     }
 
-    Store.updateTask(li.dataset.id, { text: newText, date: newDate });
-    li.dataset.date = newDate;
-    const textEl = li.querySelector('.task-text');
-    const dateEl = li.querySelector('.task-date');
-    if (textEl) textEl.textContent = newText;
-    if (dateEl) dateEl.textContent = newDate;
+    if (Store.hasDuplicate(newDate, newText, newCat, li.dataset.id)) {
+      alert(CONFIG.text.duplicateAlert);
+      return;
+    }
 
+    Store.updateTask(li.dataset.id, { text: newText, date: newDate, category: newCat });
     closeSheet();
 
     if (onBeforeSave) onBeforeSave(li);
-    if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-    else Store.saveToLocal();
-    updateStats();
+    Api.debouncedSave();
+    applyTasks(Store.getTasks());
     if (onAfterSave) onAfterSave();
   };
 
@@ -237,6 +299,8 @@ function startEditInline(li, opts) {
 
   const currentText  = textEl ? textEl.textContent : '';
   const currentDate  = li.dataset.date || Store.todayStr();
+  const taskData     = Store.getTasks().find(t => String(t.id) === li.dataset.id) || {};
+  const currentCat   = taskData.category || Store.getCategory();
   const onBeforeSave = opts?.onBeforeSave;
   const onAfterSave  = opts?.onAfterSave;
 
@@ -258,6 +322,16 @@ function startEditInline(li, opts) {
   inputDate.type   = 'date';
   inputDate.value  = currentDate;
 
+  const selectCat       = document.createElement('select');
+  selectCat.className   = 'edit-category-select';
+  Store.getCategoryKeys().forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = CONFIG.getCategoryLabel(c);
+    if (c === currentCat) opt.selected = true;
+    selectCat.appendChild(opt);
+  });
+
   const btnWrap     = document.createElement('div');
   btnWrap.className = 'actions';
 
@@ -275,27 +349,29 @@ function startEditInline(li, opts) {
     const newText = inputText.value.trim();
     if (!newText) return;
     const newDate = inputDate.value || Store.todayStr();
+    const newCat  = selectCat.value;
 
-    if (Store.hasDuplicate(newDate, newText, li.dataset.id)) {
-      alert('同一日期下已存在同名任务');
+    if (newText === currentText && newDate === currentDate && newCat === currentCat) {
+      cancelBtn.onclick();
       return;
     }
 
-    Store.updateTask(li.dataset.id, { text: newText, date: newDate });
-    li.dataset.date = newDate;
+    if (Store.hasDuplicate(newDate, newText, newCat, li.dataset.id)) {
+      alert(CONFIG.text.duplicateAlert);
+      return;
+    }
+
+    Store.updateTask(li.dataset.id, { text: newText, date: newDate, category: newCat });
+
     content.style.display = '';
-    content.querySelector('.task-text').textContent = newText;
-    content.querySelector('.task-date').textContent = newDate;
     taskInner.removeChild(wrap);
     taskInner.appendChild(actions);
     if (checkboxInner) checkboxInner.style.display = '';
-
     Store.clearEditing();
 
     if (onBeforeSave) onBeforeSave(li);
-    if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-    else Store.saveToLocal();
-    updateStats();
+    Api.debouncedSave();
+    applyTasks(Store.getTasks());
     if (onAfterSave) onAfterSave();
   };
 
@@ -311,6 +387,7 @@ function startEditInline(li, opts) {
   btnWrap.appendChild(cancelBtn);
   wrap.appendChild(inputText);
   wrap.appendChild(inputDate);
+  wrap.appendChild(selectCat);
   wrap.appendChild(btnWrap);
   content.style.display = 'none';
   taskInner.appendChild(wrap);
@@ -340,8 +417,7 @@ taskListEl.addEventListener('click', async function (e) {
       Store.removeTask(li.dataset.id);
       taskListEl.removeChild(li);
     }
-    if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-    else Store.saveToLocal();
+    Api.debouncedSave();
     updateStats();
     return;
   }
@@ -349,14 +425,11 @@ taskListEl.addEventListener('click', async function (e) {
   // 复选框点击 → 完成任务
   if (target.classList.contains('task-checkbox') && !target.classList.contains('checked')) {
     const li = target.closest('li.task');
-    if (li && doneListEl && taskListEl.contains(li)) {
+    if (li && taskListEl.contains(li)) {
       Store.updateTask(li.dataset.id, { completed: true });
-      li.classList.add('completed');
-      target.classList.add('checked');
       taskListEl.removeChild(li);
-      doneListEl.appendChild(li);
-      if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-      else Store.saveToLocal();
+      renderDoneList();
+      Api.debouncedSave();
       updateStats();
       renderHeatmap();
     }
@@ -378,15 +451,10 @@ if (doneListEl) {
 
     // 复选框点击 → 撤销完成（Undo）
     if (target.classList.contains('task-checkbox') && target.classList.contains('checked')) {
-      const id   = li.dataset.id;
-      const text = li.querySelector('.task-text')?.textContent || '';
-      const date = li.dataset.date || Store.todayStr();
+      const id = li.dataset.id;
       Store.updateTask(id, { completed: false });
-      doneListEl.removeChild(li);
-      taskListEl.appendChild(createTaskElement(text, false, date, id));
-      if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-      else Store.saveToLocal();
-      updateStats();
+      Api.debouncedSave();
+      applyTasks(Store.getTasks());
       renderHeatmap();
       return;
     }
@@ -400,10 +468,8 @@ if (doneListEl) {
     if (target.classList.contains('btn-delete')) {
       _openedInner = null;
       Store.removeTask(li.dataset.id);
-      doneListEl.removeChild(li);
-      if (Api.API_BASE) await Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-      else Store.saveToLocal();
-      updateStats();
+      Api.debouncedSave();
+      applyTasks(Store.getTasks());
     }
   });
 }
@@ -726,11 +792,11 @@ function refreshDrawerBody(dateStr, titleEl, bodyEl) {
   if (!bodyEl) bodyEl = document.getElementById('drawer-tasks');
   if (!titleEl) titleEl = document.getElementById('drawer-title');
   if (!bodyEl) return;
-  if (titleEl) titleEl.textContent = dateStr + ' 当日任务';
+  if (titleEl) titleEl.textContent = dateStr + ' ' + CONFIG.text.drawerTitle;
   const tasks = Store.getTasks().filter(t => (t.date || '').toString().slice(0, 10) === dateStr);
   bodyEl.innerHTML = '';
   if (tasks.length === 0) {
-    bodyEl.innerHTML = '<p class="query-empty">该日暂无任务</p>';
+    bodyEl.innerHTML = '<p class="query-empty">' + CONFIG.text.emptyDay + '</p>';
   } else {
     tasks.forEach(t => {
       const nt = Store.normalizeTask(t);
@@ -784,7 +850,7 @@ function renderQueryResults(tasks) {
   if (!container) return;
   container.innerHTML = '';
   if (tasks.length === 0) {
-    container.innerHTML = '<p class="query-empty">暂无符合条件的任务</p>';
+    container.innerHTML = '<p class="query-empty">' + CONFIG.text.emptyQuery + '</p>';
     return;
   }
   const uncompleted = tasks.filter(t => !t.completed);
@@ -793,7 +859,7 @@ function renderQueryResults(tasks) {
   if (uncompleted.length > 0) {
     const g  = document.createElement('div');
     g.className = 'query-group';
-    g.innerHTML = '<div class="query-group-title">未完成任务</div>';
+    g.innerHTML = '<div class="query-group-title">' + CONFIG.text.queryGroupUndone + '</div>';
     const ul = document.createElement('ul');
     ul.className = 'task-list';
     uncompleted.forEach(t => ul.appendChild(createQueryTaskElement(t)));
@@ -803,7 +869,7 @@ function renderQueryResults(tasks) {
   if (completed.length > 0) {
     const g  = document.createElement('div');
     g.className = 'query-group';
-    g.innerHTML = '<div class="query-group-title">已完成任务</div>';
+    g.innerHTML = '<div class="query-group-title">' + CONFIG.text.queryGroupDone + '</div>';
     const ul = document.createElement('ul');
     ul.className = 'task-list';
     completed.forEach(t => ul.appendChild(createQueryTaskElement(t, true)));
@@ -814,7 +880,7 @@ function renderQueryResults(tasks) {
 
 function createQueryTaskElement(t, isCompleted) {
   const nt = Store.normalizeTask(t);
-  const li = createTaskElement(nt.text, nt.completed, nt.date, nt.id);
+  const li = createTaskElement(nt.text, nt.completed, nt.date, nt.id, { showCategoryBadge: true, category: nt.category });
   li.dataset.id = String(nt.id);
 
   // 复选框处理完成/撤销（与主列表逻辑一致）
@@ -846,8 +912,7 @@ function completeQueryTask(li) {
   li.classList.add('completed');
   const cb = li.querySelector('.task-checkbox');
   if (cb) cb.classList.add('checked');
-  if (Api.API_BASE) Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-  else Store.saveToLocal();
+  Api.debouncedSave();
   applyTasks(Store.getTasks());
   const state = getQueryState();
   if (state) runQuery(state.start, state.end);
@@ -896,8 +961,7 @@ function deleteQueryTask(li) {
   const mainLi = taskListEl.querySelector(`li[data-id="${id}"]`)
     || doneListEl?.querySelector(`li[data-id="${id}"]`);
   if (mainLi) mainLi.remove();
-  if (Api.API_BASE) Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-  else Store.saveToLocal();
+  Api.debouncedSave();
   li.remove();
   const state = getQueryState();
   if (state) runQuery(state.start, state.end);
@@ -911,8 +975,7 @@ function undoQueryTask(li) {
   li.classList.remove('completed');
   const cb = li.querySelector('.task-checkbox');
   if (cb) cb.classList.remove('checked');
-  if (Api.API_BASE) Api.saveTasksToServer().catch(err => alert('保存失败：' + err.message));
-  else Store.saveToLocal();
+  Api.debouncedSave();
   applyTasks(Store.getTasks());
   const state = getQueryState();
   if (state) runQuery(state.start, state.end);
@@ -951,10 +1014,10 @@ document.getElementById('btn-import')?.addEventListener('click', async function 
   const file = fileInput.files[0];
   if (!file.name.toLowerCase().endsWith('.docx')) {
     resultEl.className   = 'import-result error';
-    resultEl.textContent = '请选择 .docx 格式文件';
+    resultEl.textContent = CONFIG.text.importSelectDocx;
     return;
   }
-  resultEl.textContent = '导入中...';
+  resultEl.textContent = CONFIG.text.importLoading;
   resultEl.className   = 'import-result';
   try {
     const buf = await file.arrayBuffer();
@@ -1038,7 +1101,7 @@ document.getElementById('btn-import')?.addEventListener('click', async function 
     restoreAndRunQuery();
   } catch (e) {
     resultEl.className   = 'import-result error';
-    resultEl.textContent = '导入失败：' + (e.message || '解析错误');
+    resultEl.textContent = CONFIG.text.importFailed + (e.message || '解析错误');
   }
 });
 
@@ -1050,8 +1113,307 @@ function loadFromLocalStorage() {
   restoreAndRunQuery();
 }
 
+// ── 分类切换 Tab ──────────────────────────────────────────────────────────────
+document.getElementById('category-tabs')?.addEventListener('click', function (e) {
+  const tab = e.target.closest('.category-tab');
+  if (!tab || tab.classList.contains('active')) return;
+  const cat = tab.dataset.category;
+  if (!Store.isValidCategory(cat)) return;
+
+  this.querySelectorAll('.category-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  Store.setCategory(cat);
+  applyTasks(Store.getTasks());
+});
+
+// ── 设置面板 ────────────────────────────────────────────────────────────────
+let _settingsDraft = null;
+
+function openSettings() {
+  const overlay = document.getElementById('settings-overlay');
+  const drawer  = document.getElementById('settings-drawer');
+  if (!overlay || !drawer) return;
+
+  _settingsDraft = CONFIG.getEffective();
+  renderSettingsBody();
+
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  drawer.setAttribute('aria-hidden', 'false');
+}
+
+function closeSettings() {
+  const overlay = document.getElementById('settings-overlay');
+  const drawer  = document.getElementById('settings-drawer');
+  if (overlay) { overlay.classList.remove('open'); overlay.setAttribute('aria-hidden', 'true'); }
+  if (drawer)  { drawer.classList.remove('open');  drawer.setAttribute('aria-hidden', 'true'); }
+  _settingsDraft = null;
+}
+
+function renderSettingsBody() {
+  const body = document.getElementById('settings-body');
+  if (!body || !_settingsDraft) return;
+  body.innerHTML = '';
+
+  // --- 基础设置 ---
+  const secBasic = createSettingsSection('基础设置');
+  const apiField = createTextField('API Base URL', _settingsDraft.API_BASE_URL, 'url', (v) => {
+    _settingsDraft.API_BASE_URL = v;
+    const input = apiField.querySelector('input');
+    if (input) input.style.borderColor = isValidURL(v) ? '' : '#ef5350';
+  });
+  secBasic.appendChild(apiField);
+  body.appendChild(secBasic);
+
+  // --- 主题色 ---
+  const secTheme = createSettingsSection('主题色');
+  const themeFields = [
+    ['主色调 (Primary)', 'primary'],
+    ['次色调 (Secondary)', 'secondary'],
+  ];
+  themeFields.forEach(([label, key]) => {
+    secTheme.appendChild(createColorField(label, _settingsDraft.theme[key], (v) => {
+      _settingsDraft.theme[key] = v;
+      document.documentElement.style.setProperty('--c-' + key, v);
+    }));
+  });
+  body.appendChild(secTheme);
+
+  // --- 文案 ---
+  const secText = createSettingsSection('文案自定义');
+  const textFields = [
+    ['页面标题', 'appTitle'],
+    ['副标题', 'appSubtitle'],
+  ];
+  textFields.forEach(([label, key]) => {
+    secText.appendChild(createTextField(label, _settingsDraft.text[key], 'text', (v) => {
+      _settingsDraft.text[key] = v;
+    }));
+  });
+  body.appendChild(secText);
+
+  // --- 分类管理 ---
+  const secCat = createSettingsSection('分类管理');
+  const catList = document.createElement('div');
+  catList.id = 'settings-cat-list';
+  renderCategoryList(catList);
+  secCat.appendChild(catList);
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn-cat-add';
+  addBtn.textContent = '+ 添加新分类';
+  addBtn.onclick = () => {
+    const newKey = 'cat_' + Date.now();
+    _settingsDraft.categories.push({ key: newKey, label: 'New', color: '#888888' });
+    renderCategoryList(catList);
+  };
+  secCat.appendChild(addBtn);
+  body.appendChild(secCat);
+}
+
+function renderCategoryList(container) {
+  container.innerHTML = '';
+  const tasks = Store.getTasks();
+  _settingsDraft.categories.forEach((cat, i) => {
+    const row = document.createElement('div');
+    row.className = 'settings-cat-row';
+
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.value = cat.label;
+    labelInput.oninput = () => { _settingsDraft.categories[i].label = labelInput.value; };
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = cssColorToHex(cat.color);
+    colorInput.oninput = () => { _settingsDraft.categories[i].color = colorInput.value; };
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn-cat-remove';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.onclick = () => {
+      const hasTasks = tasks.some(t => (t.category || 'self') === cat.key);
+      if (hasTasks && !confirm('该分类下有任务数据，删除后这些任务将暂时无法显示。确定删除？')) return;
+      _settingsDraft.categories.splice(i, 1);
+      renderCategoryList(container);
+    };
+
+    row.appendChild(labelInput);
+    row.appendChild(colorInput);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+  });
+}
+
+function createSettingsSection(title) {
+  const sec = document.createElement('div');
+  sec.className = 'settings-section';
+  const h = document.createElement('div');
+  h.className = 'settings-section-title';
+  h.textContent = title;
+  sec.appendChild(h);
+  return sec;
+}
+
+function createTextField(label, value, type, onChange) {
+  const field = document.createElement('div');
+  field.className = 'settings-field';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  const input = document.createElement('input');
+  input.type = type || 'text';
+  input.value = value || '';
+  input.oninput = () => onChange(input.value);
+  field.appendChild(lbl);
+  field.appendChild(input);
+  return field;
+}
+
+function createColorField(label, value, onChange) {
+  const field = document.createElement('div');
+  field.className = 'settings-field';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = cssColorToHex(value);
+  input.oninput = () => onChange(input.value);
+  field.appendChild(lbl);
+  field.appendChild(input);
+  return field;
+}
+
+function cssColorToHex(color) {
+  if (!color) return '#000000';
+  if (color.startsWith('#') && (color.length === 7 || color.length === 4)) return color;
+  const d = document.createElement('div');
+  d.style.color = color;
+  document.body.appendChild(d);
+  const computed = getComputedStyle(d).color;
+  document.body.removeChild(d);
+  const m = computed.match(/(\d+)/g);
+  if (!m || m.length < 3) return '#000000';
+  return '#' + m.slice(0, 3).map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
+}
+
+function isValidURL(str) {
+  if (!str || !str.trim()) return true;
+  try {
+    const url = new URL(str);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function saveSettings() {
+  if (!_settingsDraft) return;
+  if (!isValidURL(_settingsDraft.API_BASE_URL)) {
+    alert('API Base URL 格式无效，请输入有效的 HTTP/HTTPS 地址');
+    return;
+  }
+  CONFIG.saveUserOverrides(_settingsDraft);
+  window.location.reload();
+}
+
+function resetSettings() {
+  CONFIG.clearUserOverrides();
+  window.location.reload();
+}
+
+document.getElementById('btn-settings')?.addEventListener('click', openSettings);
+document.getElementById('settings-close')?.addEventListener('click', closeSettings);
+document.getElementById('settings-overlay')?.addEventListener('click', closeSettings);
+document.getElementById('settings-save')?.addEventListener('click', saveSettings);
+document.getElementById('settings-reset')?.addEventListener('click', resetSettings);
+
+// ── 配置应用：CSS 变量 + 文案 + 动态 DOM ────────────────────────────────────
+function applyConfig() {
+  if (typeof CONFIG === 'undefined') return;
+  const r = document.documentElement.style;
+  const t = CONFIG.theme;
+
+  r.setProperty('--c-primary', t.primary);
+  r.setProperty('--c-secondary', t.secondary);
+  r.setProperty('--c-danger', t.danger);
+  r.setProperty('--c-edit', t.edit);
+  r.setProperty('--c-success', t.success);
+  r.setProperty('--c-cancel', t.cancel);
+  r.setProperty('--c-undo', t.undo);
+  r.setProperty('--c-badge-bg', t.badgeBg);
+  r.setProperty('--c-task-bg', t.taskBg);
+  r.setProperty('--c-completed-bg', t.completedBg);
+  r.setProperty('--c-text-muted', t.textMuted);
+  r.setProperty('--c-checkbox-border', CONFIG.checkbox.border);
+  r.setProperty('--c-checkbox-checked', CONFIG.checkbox.checked);
+  r.setProperty('--c-edit-drawer-border', CONFIG.editDrawer.border);
+  r.setProperty('--c-edit-drawer-focus', CONFIG.editDrawer.borderFocus);
+  r.setProperty('--c-edit-drawer-save', CONFIG.editDrawer.saveBg);
+  r.setProperty('--c-swipe-edit', CONFIG.swipeEditBg);
+  CONFIG.heatmapLevels.forEach((c, i) => r.setProperty('--c-heatmap-' + i, c));
+
+  const txt = CONFIG.text;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('appTitle', txt.appTitle);
+  set('appSubtitle', txt.appSubtitle);
+  set('motivationalQuote', txt.defaultQuote);
+  set('statsHeading', txt.statsHeading);
+  set('statTodayLabel', txt.statTodayLabel);
+  set('todayTasksTitle', txt.todayTasksTitle);
+  set('completedTitle', txt.completedTitle);
+  set('queryTitle', txt.queryTitle);
+  set('queryStartLabel', txt.queryStartLabel);
+  set('queryEndLabel', txt.queryEndLabel);
+  set('importTitle', txt.importTitle);
+  set('editDrawerTitle', txt.editDrawerTitle);
+  set('drawer-title', txt.drawerTitle);
+
+  const btnAdd = document.getElementById('btn-add');
+  if (btnAdd) btnAdd.textContent = txt.addBtnLabel;
+  const btnQuery = document.getElementById('btn-query');
+  if (btnQuery) btnQuery.textContent = txt.queryBtnLabel;
+  const btnImport = document.getElementById('btn-import');
+  if (btnImport) btnImport.textContent = txt.importBtnLabel;
+  const inputEl = document.getElementById('task-input');
+  if (inputEl) inputEl.placeholder = txt.inputPlaceholder;
+  const editText = document.getElementById('edit-drawer-text');
+  if (editText) editText.placeholder = txt.editPlaceholder;
+  const editSave = document.getElementById('edit-drawer-save');
+  if (editSave) editSave.textContent = txt.editSaveLabel;
+  const editCancel = document.getElementById('edit-drawer-cancel');
+  if (editCancel) editCancel.textContent = txt.editCancelLabel;
+
+  // 动态生成分类 Tab
+  const tabsEl = document.getElementById('category-tabs');
+  if (tabsEl) {
+    tabsEl.innerHTML = '';
+    CONFIG.categories.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'category-tab' + (cat.key === CONFIG.DEFAULT_CATEGORY ? ' active' : '');
+      btn.dataset.category = cat.key;
+      btn.textContent = cat.label;
+      tabsEl.appendChild(btn);
+    });
+  }
+
+  // 动态生成编辑弹窗分类选项
+  const catSelect = document.getElementById('edit-drawer-category');
+  if (catSelect) {
+    catSelect.innerHTML = '';
+    CONFIG.categories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat.key;
+      opt.textContent = cat.label;
+      catSelect.appendChild(opt);
+    });
+  }
+}
+
 // ── 初始化 ───────────────────────────────────────────────────────────────────
 function init() {
+  applyConfig();
+
   // 将 UI 回调注入到 Api 层，保持 api.js 与 DOM 解耦
   Api.init({
     applyTasks,
@@ -1063,8 +1425,8 @@ function init() {
   const y   = new Date().getFullYear();
   const el1 = document.getElementById('statCompletedLabel');
   const el2 = document.getElementById('statRateLabel');
-  if (el1) el1.textContent = `${y}'s Completed Tasks`;
-  if (el2) el2.textContent = `${y}'s Execution`;
+  if (el1) el1.textContent = CONFIG.text.statCompletedTpl.replace('{year}', y);
+  if (el2) el2.textContent = CONFIG.text.statRateTpl.replace('{year}', y);
 
   // 首次数据加载；无论加载成功/降级，完成后启动轮询
   if (Api.API_BASE) {

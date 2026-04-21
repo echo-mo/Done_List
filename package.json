@@ -1,5 +1,5 @@
 {
-  "name": "done-list",
+  "name": "todo-backend",
   "version": "5.0.0",
   "description": "Simple todo backend for saving tasks (used with a static frontend)",
   "main": "server.js",
